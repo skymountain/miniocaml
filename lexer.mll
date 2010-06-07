@@ -1,4 +1,6 @@
 {
+exception Lexical_error
+  
 let reservedWords = [
   (* Keywords *)
   ("else" , Parser.ELSE);
@@ -27,6 +29,7 @@ rule main = parse
 | "&&" { Parser.BOOLAND }
 | "||" { Parser.BOOLOR }
 | "="  { Parser.EQ }
+| "(*" { comment 0 lexbuf; main lexbuf }
       
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in
@@ -35,6 +38,11 @@ rule main = parse
       with
       _ -> Parser.ID id
      }
-| eof { exit 0 }
-
-
+| eof { raise End_of_file }
+| _   { raise Lexical_error }
+        
+(* skip commet region *)        
+and comment depth = parse
+    "(*" { comment (depth + 1) lexbuf }
+  | "*)" { if depth = 0 then () else comment (depth - 1) lexbuf }
+  | _    { comment depth lexbuf }
