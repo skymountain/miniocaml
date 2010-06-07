@@ -3,7 +3,7 @@ open Syntax
 %}
 
 %token LPAREN RPAREN SEMISEMI
-%token PLUS MULT LT
+%token PLUS MULT LT BOOLAND BOOLOR
 %token IF THEN ELSE TRUE FALSE
 
 %token <int> INTV
@@ -18,6 +18,14 @@ toplevel :
 
 Expr :
     IfExpr { $1 }
+  | BORExpr { $1 }
+
+BORExpr :  /* left association */
+    BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
+  | BANDExpr { $1 }
+      
+BANDExpr : /* left association */
+    BANDExpr BOOLAND LTExpr { BinOp (Band, $1, $3) }
   | LTExpr { $1 }
 
 LTExpr : 

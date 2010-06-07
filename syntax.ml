@@ -1,7 +1,7 @@
 (* ML interpreter / type reconstruction *)
 type id = string
 
-type binOp = Plus | Mult | Lt
+type binOp = Plus | Mult | Lt | Band | Bor
 
 type exp =
     Var of id

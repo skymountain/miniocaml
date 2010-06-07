@@ -17,13 +17,17 @@ let rec pp_val = function
       if b then print_string "true" else print_string "false"
 
 let rec apply_prim op arg1 arg2 = match op, arg1, arg2 with
-    Plus, IntV i1, IntV i2 -> IntV (i1 + i2)
-  | Plus, _, _ -> err ("Both arguments must be integer: +")
-  | Mult, IntV i1, IntV i2 -> IntV (i1 * i2)
-  | Mult, _, _ -> err ("Both arguments must be integer: *")
-  | Lt, IntV i1, IntV i2 -> BoolV (i1 < i2)
-  | Lt, _, _ -> err ("Both arguments must be integer: <")
-
+    Plus, IntV i1 , IntV i2  -> IntV (i1 + i2)
+  | Plus, _       , _        -> err ("Both arguments must be integer: +")
+  | Mult, IntV i1 , IntV i2  -> IntV (i1 * i2)
+  | Mult, _       , _        -> err ("Both arguments must be integer: *")
+  | Lt  , IntV i1 , IntV i2  -> BoolV (i1 < i2)
+  | Lt  , _       , _        -> err ("Both arguments must be integer: <")
+  | Band, BoolV b1, BoolV b2 -> BoolV (b1 && b2)
+  | Band, _       , _        -> err ("Both argument must be bool: &&")
+  | Bor , BoolV b1, BoolV b2 -> BoolV (b1 || b2)
+  | Bor , _       , _        -> err ("Both argument must be bool: ||")
+      
 let rec eval_exp env = function
     Var x -> 
       (try Environment.lookup x env with 
