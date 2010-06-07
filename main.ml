@@ -9,8 +9,8 @@ let rec read_eval_print env =
       let decl = Parser.toplevel Lexer.main (Lexing.from_channel stdin) in
       eval_decl env decl
     with
-      Parsing.Parse_error
-    | Failure _           -> print_endline "Syntax error"; next_eval env
+      Parsing.Parse_error -> print_endline "Syntax error"; next_eval env
+    | Failure _           -> print_endline "Lexical error"; next_eval env
     | Eval.Error s        -> print_endline s; next_eval env
   in
   let (id, newenv, v) = next_eval env in

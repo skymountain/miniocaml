@@ -5,6 +5,7 @@ open Syntax
 %token LPAREN RPAREN SEMISEMI
 %token PLUS MULT LT BOOLAND BOOLOR
 %token IF THEN ELSE TRUE FALSE
+%token LET IN EQ
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -15,11 +16,16 @@ open Syntax
 
 toplevel :
     Expr SEMISEMI { Exp $1 }
-
+  | LET ID EQ Expr SEMISEMI { Decl ($2, $4) }
+      
 Expr :
     IfExpr { $1 }
+  | LetExpr { $1 }
   | BORExpr { $1 }
 
+LetExpr :
+    LET ID EQ Expr IN Expr { LetExp ($2, $4, $6) }
+      
 BORExpr :  /* left association */
     BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
   | BANDExpr { $1 }
@@ -49,5 +55,3 @@ AExpr :
 
 IfExpr :
     IF Expr THEN Expr ELSE Expr { IfExp ($2, $4, $6) }
-
-   
