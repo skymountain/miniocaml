@@ -13,10 +13,16 @@ let rec read_eval_print env =
     | Failure _           -> print_endline "Lexical error"; next_eval env
     | Eval.Error s        -> print_endline s; next_eval env
   in
-  let (id, newenv, v) = next_eval env in
-  Printf.printf "val %s = " id;
-  pp_val v;
-  print_newline();
+  let (ids, newenv, vs) = next_eval env in
+  List.iter2 (fun id v ->
+                Printf.printf "val %s = " id;
+                pp_val v;
+                print_newline()
+             )
+    ids vs;
+  (* Printf.printf "val %s = " id; *)
+  (* pp_val v; *)
+  (* print_newline(); *)
   read_eval_print newenv
     
 let initial_env = 

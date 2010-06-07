@@ -10,7 +10,11 @@ type exp =
   | BinOp of binOp * exp * exp
   | IfExp of exp * exp * exp
   | LetExp of id * exp * exp
+
+type letSeq =
+    LetSeq of id * exp * letSeq
+  | LetLast of id * exp
       
 type program = 
     Exp of exp
-  | Decl of id * exp
+  | Decl of letSeq

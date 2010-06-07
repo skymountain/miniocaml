@@ -16,8 +16,12 @@ open Syntax
 
 toplevel :
     Expr SEMISEMI { Exp $1 }
-  | LET ID EQ Expr SEMISEMI { Decl ($2, $4) }
+  | Decl SEMISEMI { Decl $1 }
       
+Decl :
+    LET ID EQ Expr { LetLast ($2, $4) }
+  | LET ID EQ Expr Decl     { LetSeq ($2, $4, $5) }
+
 Expr :
     IfExpr { $1 }
   | LetExpr { $1 }

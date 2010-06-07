@@ -49,7 +49,17 @@ let rec eval_exp env = function
       eval_exp (Environment.extend id value env) exp2
         
 let eval_decl env = function
-    Exp e -> let v = eval_exp env e in ("-", env, v)
-  | Decl (id, e) ->
-      let v = eval_exp env e in
-      (id, (Environment.extend id v env), v)
+    Exp e -> let v = eval_exp env e in (["-"], env, [v])
+  | Decl l ->
+      let rec f ids env vs = function
+          LetSeq (id, e, r) ->
+            let v = eval_exp env e in
+            f (id::ids) (Environment.extend id v env) (v::vs) r
+        | LetLast (id, e) ->
+            let v = eval_exp env e in
+            List.rev (id::ids), (Environment.extend id v env), List.rev (v::vs)
+      in
+      f [] env [] l
+          
+      (* let v = eval_exp env e in *)
+      (* (id, (Environment.extend id v env), v) *)
