@@ -81,7 +81,8 @@ IDs :
 /* match */
 MatchExpr :
     MATCH Expr WITH LSQBRA RSQBRA RARROW Expr PIPE ID COLON2 ID RARROW Expr
-    { MatchExp ($2, $7, $9, $11, $13) }
+    { if $9 = $11 then raise (Syntax.Parse_error "Cannot use same name between a head variable and a tail one.")
+      else MatchExp ($2, $7, $9, $11, $13) }
       
 /* basic expression */
 BORExpr :  /* left association */

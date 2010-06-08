@@ -11,9 +11,10 @@ let rec read_eval_print env ch promp =
       let decl = Parser.toplevel Lexer.main (Lexing.from_channel ch) in
       eval env decl
     with
-      Parsing.Parse_error -> err "Syntax error"; next_eval env
-    | Lexer.Lexical_error -> err "Lexical error"; next_eval env
-    | Eval.Error s        -> err s; next_eval env
+      Parsing.Parse_error  -> err "Syntax error"; next_eval env
+    | Lexer.Lexical_error  -> err "Lexical error"; next_eval env
+    | Eval.Error s         -> err s; next_eval env
+    | Syntax.Parse_error s -> err s; next_eval env
   in
   let (ids, newenv, vs) = next_eval env in
   List.iter2 (fun id v ->

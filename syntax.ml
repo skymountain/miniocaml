@@ -1,4 +1,5 @@
 (* ML interpreter / type reconstruction *)
+
 type id = string
 
 type binOp = Plus | Mult | Lt | Band | Bor | Cons
@@ -27,3 +28,5 @@ type program =
     Exp of exp
   | Decl of letBlockSeq
   (* | RecDecl of letRecBlockSeq *)
+
+exception Parse_error of string
