@@ -35,10 +35,13 @@ Expr :
   | LetExpr { $1 }
   | BORExpr { $1 }
   | FunExpr { $1 }
-      
+
 LetExpr :
     Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
-      
+
+FunExpr :
+    FUN ID RARROW Expr { FunExp ($2, $4) }
+
 BORExpr :  /* left association */
     BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
   | BANDExpr { $1 }

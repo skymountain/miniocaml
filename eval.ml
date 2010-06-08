@@ -16,7 +16,7 @@ let rec pp_val = function
       print_int i
   | BoolV b -> 
       if b then print_string "true" else print_string "false"
-  | 
+  | ProcV _ -> print_string "<function>"
 
 (* evaluate arithmetic expression *)        
 let rec apply_prim op arg1 arg2 = match op, arg1, arg2 with
@@ -56,7 +56,7 @@ let rec eval_exp env = function
       let funval = eval_exp env exp1 in
       let arg = eval_exp env exp2 in
       (match funval with
-         ProcV (id, exp, env') ->
+         ProcV (id, body, env') ->
            let newenv = Environment.extend id arg env' in
            eval_exp newenv body
        | _ -> err "Non-function value is applied")
