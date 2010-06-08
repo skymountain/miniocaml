@@ -41,6 +41,7 @@ rule main = parse
 | "]"  { Parser.RSQBRA }
 | "::" { Parser.COLON2 }
 | "|"  { Parser.PIPE }
+| ";"  { Parser.SEMI }
       
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in

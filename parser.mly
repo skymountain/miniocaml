@@ -13,7 +13,7 @@ let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
 %token IF THEN ELSE TRUE FALSE
 %token LET IN EQ AND
 %token RARROW FUN DFUN REC
-%token LSQBRA RSQBRA COLON2
+%token LSQBRA RSQBRA COLON2 SEMI
 %token MATCH WITH PIPE
 
 %token <int> INTV
@@ -118,7 +118,12 @@ AExpr :
   | FALSE { BLit false }
   | ID { Var $1 }
   | LSQBRA RSQBRA { LLit [] }
+  | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
 
+ExpList :
+    Expr { [$1] }
+  | Expr SEMI ExpList { $1::$3 }
+      
 IfExpr :
     IF Expr THEN Expr ELSE Expr { IfExp ($2, $4, $6) }
