@@ -9,7 +9,7 @@ let rec read_eval_print env ch promp =
     flush stdout;
     try 
       let decl = Parser.toplevel Lexer.main (Lexing.from_channel ch) in
-      eval_decl env decl
+      eval env decl
     with
       Parsing.Parse_error -> err "Syntax error"; next_eval env
     | Lexer.Lexical_error -> err "Lexical error"; next_eval env

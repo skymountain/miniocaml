@@ -9,12 +9,14 @@ type exp =
   | BLit of bool
   | BinOp of binOp * exp * exp
   | IfExp of exp * exp * exp
-  | LetExp of id * exp * exp
+  | LetExp of id list * exp list * exp
+  | FunExp of id * exp
+  | AppExp of exp * exp
 
-type letSeq =
-    LetSeq of id * exp * letSeq
-  | LetLast of id * exp
+type letBlockSeq =
+    LetBlockSeq of id list * exp list * letBlockSeq
+  | LetBlock of id list * exp list (* ids declared with "and" simultaneously *)
       
 type program = 
     Exp of exp
-  | Decl of letSeq
+  | Decl of letBlockSeq

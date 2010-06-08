@@ -5,7 +5,8 @@ open Syntax
 %token LPAREN RPAREN SEMISEMI
 %token PLUS MULT LT BOOLAND BOOLOR
 %token IF THEN ELSE TRUE FALSE
-%token LET IN EQ
+%token LET IN EQ AND
+%token RARROW FUN
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -19,16 +20,24 @@ toplevel :
   | Decl SEMISEMI { Decl $1 }
       
 Decl :
-    LET ID EQ Expr { LetLast ($2, $4) }
-  | LET ID EQ Expr Decl     { LetSeq ($2, $4, $5) }
+    Let      { let x, y = $1 in LetBlock (x, y) }
+  | Let Decl { let x, y = $1 in LetBlockSeq (x, y, $2) }
 
+Let :
+    LET Letsub { $2 }
+
+Letsub :
+    ID EQ Expr { [$1], [$3] }
+  | ID EQ Expr AND Letsub { let ids, vs = $5 in $1::ids, $3::vs }
+      
 Expr :
     IfExpr { $1 }
   | LetExpr { $1 }
   | BORExpr { $1 }
-
+  | FunExpr { $1 }
+      
 LetExpr :
-    LET ID EQ Expr IN Expr { LetExp ($2, $4, $6) }
+    Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
       
 BORExpr :  /* left association */
     BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
@@ -47,9 +56,13 @@ PExpr :
   | MExpr { $1 }
 
 MExpr : 
-    MExpr MULT AExpr { BinOp (Mult, $1, $3) }
-  | AExpr { $1 }
+    MExpr MULT AppExpr { BinOp (Mult, $1, $3) }
+  | AppExpr { $1 }
 
+AppExpr :
+    AppExpr AExpr { AppExp ($1, $2) }
+  | AExpr { $1 }
+      
 AExpr :
     INTV { ILit $1 }
   | TRUE { BLit true }
