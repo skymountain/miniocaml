@@ -13,11 +13,18 @@ type exp =
   | FunExp of id * exp
   | AppExp of exp * exp
   | DFunExp of id * exp
+  | LetRecExp of id list * id list * exp list * exp
       
 type letBlockSeq =
     LetBlockSeq of id list * exp list * letBlockSeq
   | LetBlock of id list * exp list (* ids declared with "and" simultaneously *)
+  | LetRecBlockSeq of id list * id list * exp list * letBlockSeq
+  | LetRecBlock of id list * id list * exp list
+(* and *)
+(* type letRecBlockSeq = *)
+    
       
 type program = 
     Exp of exp
   | Decl of letBlockSeq
+  (* | RecDecl of letRecBlockSeq *)

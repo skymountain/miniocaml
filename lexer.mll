@@ -13,6 +13,7 @@ let reservedWords = [
   ("and"  , Parser.AND);
   ("fun"  , Parser.FUN);
   ("dfun" , Parser.DFUN);
+  ("rec"  , Parser.REC);
 ] 
 }
 
