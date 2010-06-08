@@ -56,12 +56,7 @@ LetRecsub :
                                    $1::ids, h::paras, (to_funexp t $4)::exps }
 
 Expr :
-    IfExpr { $1 }
-  | LetExpr { $1 }
-  | BORExpr { $1 }
-  | FunExpr { $1 }
-  | LetRecExpr { $1 }
-  | MatchExpr { $1 }
+    BORExpr { $1 }
 
 /* let */
 LetExpr :
@@ -121,7 +116,15 @@ AExpr :
   | LSQBRA RSQBRA { LLit [] }
   | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
+  | SExpr { $1 }
 
+SExpr :
+    IfExpr { $1 }
+  | LetExpr { $1 }
+  | FunExpr { $1 }
+  | LetRecExpr { $1 }
+  | MatchExpr { $1 }
+      
 ExpList :
     Expr { [$1] }
   | Expr SEMI ExpList { $1::$3 }
