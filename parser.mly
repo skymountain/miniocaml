@@ -13,6 +13,8 @@ let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
 %token IF THEN ELSE TRUE FALSE
 %token LET IN EQ AND
 %token RARROW FUN DFUN REC
+%token LSQBRA RSQBRA COLON2
+%token MATCH WITH PIPE
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -59,12 +61,15 @@ Expr :
   | BORExpr { $1 }
   | FunExpr { $1 }
   | LetRecExpr { $1 }
-      
+  | MatchExpr { $1 }
+
+/* let */
 LetExpr :
     Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
 LetRecExpr :
     LetRec IN Expr { let x, y, z = $1 in LetRecExp (x, y, z, $3) }
 
+/* function */
 FunExpr :
     FUN IDs RARROW Expr { to_funexp $2 $4 }
   | DFUN IDs RARROW Expr { to_dfunexp $2 $4 }
@@ -72,7 +77,13 @@ FunExpr :
 IDs :
     ID { [$1] }
   | ID IDs { $1::$2 }
+
+/* match */
+MatchExpr :
+    MATCH Expr WITH LSQBRA RSQBRA RARROW Expr PIPE ID COLON2 ID RARROW Expr
+    { MatchExp ($2, $7, $9, $11, $13) }
       
+/* basic expression */
 BORExpr :  /* left association */
     BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
   | BANDExpr { $1 }
@@ -82,9 +93,13 @@ BANDExpr : /* left association */
   | LTExpr { $1 }
 
 LTExpr : 
-    PExpr LT PExpr { BinOp (Lt, $1, $3) }
-  | PExpr { $1 }
+    ListExpr LT ListExpr { BinOp (Lt, $1, $3) }
+  | ListExpr { $1 }
 
+ListExpr :
+    PExpr COLON2 ListExpr { BinOp (Cons, $1, $3) }
+  | PExpr { $1 }
+      
 PExpr :
     PExpr PLUS MExpr { BinOp (Plus, $1, $3) }
   | MExpr { $1 }
@@ -102,6 +117,7 @@ AExpr :
   | TRUE { BLit true }
   | FALSE { BLit false }
   | ID { Var $1 }
+  | LSQBRA RSQBRA { LLit [] }
   | LPAREN Expr RPAREN { $2 }
 
 IfExpr :

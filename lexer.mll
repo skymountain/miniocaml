@@ -14,6 +14,8 @@ let reservedWords = [
   ("fun"  , Parser.FUN);
   ("dfun" , Parser.DFUN);
   ("rec"  , Parser.REC);
+  ("match", Parser.MATCH);
+  ("with" , Parser.WITH);
 ] 
 }
 
@@ -35,6 +37,10 @@ rule main = parse
 | "="  { Parser.EQ }
 | "(*" { comment 0 lexbuf; main lexbuf }
 | "->" { Parser.RARROW }
+| "["  { Parser.LSQBRA }
+| "]"  { Parser.RSQBRA }
+| "::" { Parser.COLON2 }
+| "|"  { Parser.PIPE }
       
 | ['a'-'z'] ['a'-'z' '0'-'9' '_' '\'']*
     { let id = Lexing.lexeme lexbuf in

@@ -5,6 +5,7 @@ type exval =
   | BoolV of bool
   | ProcV of id * exp * dnval Environment.t ref (* static binding *)
   | DProcV of id * exp                          (* dynamic binding *)
+  | ListV of exval list
 and dnval = exval
 
 exception Error of string
@@ -19,7 +20,8 @@ let rec pp_val = function
       if b then print_string "true" else print_string "false"
   | ProcV _ -> print_string "<function>"
   | DProcV _ -> print_string "<dfunction>"
-
+  | ListV vs -> print_string "["; List.iter (fun v -> pp_val v; print_string ";") vs; print_string "]"
+      
 (********************************************************)      
 (************************* eval *************************)
 (********************************************************)
@@ -36,7 +38,9 @@ let rec apply_prim op arg1 arg2 = match op, arg1, arg2 with
   | Band, _       , _        -> err ("Both argument must be bool: &&")
   | Bor , BoolV b1, BoolV b2 -> BoolV (b1 || b2)
   | Bor , _       , _        -> err ("Both argument must be bool: ||")
-
+  | Cons, h       , ListV t  -> ListV (h::t)
+  | Cons, _       , _        -> err ("Second argument must be list: ::")
+      
 (* evaluate expression *)
 let rec eval_exp env = function
     Var x -> 
@@ -89,7 +93,19 @@ let rec eval_exp env = function
       let newenv = f env (ids, paras, exps) in
       dummyenv := newenv;
       eval_exp newenv exp2
-
+  (* list literal *)
+  | LLit exps ->
+      ListV (List.map (eval_exp env) exps)
+  (* match *)
+  | MatchExp (cond, null_exp, h_id, t_id, cons_exp) ->
+      let condv = eval_exp env cond in
+      (match condv with
+         ListV [] -> eval_exp env null_exp
+       | ListV (h::t) ->
+           let newenv = Environment.extendl [h_id;t_id] [h;ListV t] env in
+           eval_exp newenv cons_exp
+       | _ -> err ("Non-list value is matched"))
+        
 (* evaluate expressions *)
 and eval_exps env es =  List.map (fun e-> eval_exp env e) es
 
