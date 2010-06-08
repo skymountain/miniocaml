@@ -1,5 +1,9 @@
 %{
 open Syntax
+
+let to_funexp ids exp =
+  List.fold_left (fun acc id -> FunExp (id, acc)) exp (List.rev ids)
+    
 %}
 
 %token LPAREN RPAREN SEMISEMI
@@ -29,6 +33,8 @@ Let :
 Letsub :
     ID EQ Expr { [$1], [$3] }
   | ID EQ Expr AND Letsub { let ids, vs = $5 in $1::ids, $3::vs }
+  | ID IDs EQ Expr { [$1], [to_funexp $2 $4] }
+  | ID IDs EQ Expr AND Letsub { let ids, vs = $6 in $1::ids, (to_funexp $2 $4)::vs }
       
 Expr :
     IfExpr { $1 }
@@ -40,8 +46,12 @@ LetExpr :
     Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
 
 FunExpr :
-    FUN ID RARROW Expr { FunExp ($2, $4) }
+    FUN IDs RARROW Expr { to_funexp $2 $4 }
 
+IDs :
+    ID { [$1] }
+  | ID IDs { $1::$2 }
+      
 BORExpr :  /* left association */
     BORExpr BOOLOR BANDExpr { BinOp (Bor, $1, $3) }
   | BANDExpr { $1 }
