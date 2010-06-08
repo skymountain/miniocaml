@@ -1,16 +1,18 @@
 %{
 open Syntax
 
-let to_funexp ids exp =
-  List.fold_left (fun acc id -> FunExp (id, acc)) exp (List.rev ids)
-    
+let to_funexp' ids exp f =
+  List.fold_left (fun acc id -> f id acc) exp (List.rev ids)
+let to_funexp ids exp = to_funexp' ids exp (fun id acc -> FunExp (id, acc))
+let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
+  
 %}
 
 %token LPAREN RPAREN SEMISEMI
 %token PLUS MULT LT BOOLAND BOOLOR
 %token IF THEN ELSE TRUE FALSE
 %token LET IN EQ AND
-%token RARROW FUN
+%token RARROW FUN DFUN
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -47,6 +49,7 @@ LetExpr :
 
 FunExpr :
     FUN IDs RARROW Expr { to_funexp $2 $4 }
+  | DFUN IDs RARROW Expr { to_dfunexp $2 $4 }
 
 IDs :
     ID { [$1] }

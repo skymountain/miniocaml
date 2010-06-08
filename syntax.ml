@@ -12,7 +12,8 @@ type exp =
   | LetExp of id list * exp list * exp
   | FunExp of id * exp
   | AppExp of exp * exp
-
+  | DFunExp of id * exp
+      
 type letBlockSeq =
     LetBlockSeq of id list * exp list * letBlockSeq
   | LetBlock of id list * exp list (* ids declared with "and" simultaneously *)
