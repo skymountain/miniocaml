@@ -4,6 +4,18 @@ type id = string
 
 type binOp = Plus | Mult | Lt | Band | Bor | Cons
 
+type constant =
+    CInt of int
+  | CBool of bool
+  | CNull
+    
+type pattern =
+    Wildcard
+  | Const of constant
+  | As of pattern * id
+  | Or of pattern * pattern
+  | Lpat of pattern list
+      
 type exp =
     Var of id
   | ILit of int
@@ -16,8 +28,9 @@ type exp =
   | DFunExp of id * exp
   | LetRecExp of id list * id list * exp list * exp
   | LLit of exp list 
-  | MatchExp of exp * exp * id * id * exp (* match exp with [] -> exp | id::id -> exp *)
-                                             
+  (* | MatchExp of exp * exp * id * id * exp (\* match exp with [] -> exp | id::id -> exp *\) *)
+  | MatchExp of exp * (pattern * exp) list
+      
 type letBlockSeq =
     LetBlockSeq of id list * exp list * letBlockSeq
   | LetBlock of id list * exp list (* ids declared with "and" simultaneously *)

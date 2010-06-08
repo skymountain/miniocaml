@@ -5,7 +5,12 @@ let to_funexp' ids exp f =
   List.fold_left (fun acc id -> f id acc) exp (List.rev ids)
 let to_funexp ids exp = to_funexp' ids exp (fun id acc -> FunExp (id, acc))
 let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
-  
+let to_const =
+  function
+    ILit i  -> CInt i
+  | BLit b  -> CBool b
+  | LLit [] -> CNull
+  | _       -> assert false
 %}
 
 %token LPAREN RPAREN SEMISEMI
@@ -14,7 +19,7 @@ let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
 %token LET IN EQ AND
 %token RARROW FUN DFUN REC
 %token LSQBRA RSQBRA COLON2 SEMI
-%token MATCH WITH PIPE
+%token MATCH WITH PIPE UNDERBAR AS
 
 %token <int> INTV
 %token <Syntax.id> ID
@@ -75,9 +80,14 @@ IDs :
 
 /* match */
 MatchExpr :
-    MATCH Expr WITH LSQBRA RSQBRA RARROW Expr PIPE ID COLON2 ID RARROW Expr
-    { if $9 = $11 then raise (Syntax.Parse_error "Cannot use same name between a head variable and a tail one.")
-      else MatchExp ($2, $7, $9, $11, $13) }
+    MATCH Expr WITH PatternSeq { MatchExp ($2, $4) }
+
+PatternSeq :
+    Pattern RARROW Expr { [$1, $3] }
+  | Pattern RARROW Expr PIPE PatternSeq { ($1, $3)::$5 }
+    /* MATCH Expr WITH LSQBRA RSQBRA RARROW Expr PIPE ID COLON2 ID RARROW Expr */
+    /* { if $9 = $11 then raise (Syntax.Parse_error "Cannot use same name between a head variable and a tail one.") */
+    /*   else MatchExp ($2, $7, $9, $11, $13) } */
       
 /* basic expression */
 BORExpr :  /* left association */
@@ -109,15 +119,18 @@ AppExpr :
   | AExpr { $1 }
       
 AExpr :
-    INTV { ILit $1 }
-  | TRUE { BLit true }
-  | FALSE { BLit false }
+    Constant { $1 }
   | ID { Var $1 }
-  | LSQBRA RSQBRA { LLit [] }
   | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
   | SExpr { $1 }
 
+Constant :
+    INTV { ILit $1 }
+  | TRUE { BLit true }
+  | FALSE { BLit false }
+  | LSQBRA RSQBRA { LLit [] }
+      
 SExpr :
     IfExpr { $1 }
   | LetExpr { $1 }
@@ -131,3 +144,23 @@ ExpList :
       
 IfExpr :
     IF Expr THEN Expr ELSE Expr { IfExp ($2, $4, $6) }
+
+/* pattern */
+Pattern :
+    OrPattern { $1 }
+  | Pattern AS ID { As ($1, $3) }
+
+OrPattern :
+    OrPattern PIPE APattern { Or ($1, $3) }
+  | APattern { $1 }
+
+APattern :
+    UNDERBAR { Wildcard }
+  | Constant { Const (to_const $1) }
+  | LPAREN Pattern RPAREN { $2 }
+  | LSQBRA ListPattern RSQBRA { Lpat $2 }
+  | LSQBRA RSQBRA { Lpat [] }
+      
+ListPattern :
+    Pattern { [$1] }
+  | Pattern SEMI ListPattern { $1::$3 }

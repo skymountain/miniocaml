@@ -1,5 +1,17 @@
 open Syntax 
 
+module StrSet = Set.Make (struct
+                            type t = string
+                            let compare = String.compare
+                          end)
+let ebound = StrSet.empty
+
+(* for debug *)
+let print_set s set =
+  print_endline s;
+  StrSet.iter (fun s -> print_string (Printf.sprintf "%s," s)) set;
+  print_newline ();
+  
 type exval = 
     IntV of int
   | BoolV of bool
@@ -9,7 +21,8 @@ type exval =
 and dnval = exval
 
 exception Error of string
-
+exception Exit 
+  
 let err s = raise (Error s)
 
 (* pretty printing *)
@@ -97,15 +110,59 @@ let rec eval_exp env = function
   | LLit exps ->
       ListV (List.map (eval_exp env) exps)
   (* match *)
-  | MatchExp (cond, null_exp, h_id, t_id, cons_exp) ->
+  | MatchExp (cond, l) ->
+      let rec matching env condv = function
+          Wildcard -> env, ebound, true
+        | Const c  -> (match condv, c with
+                         IntV i1 , CInt i2  when i1 = i2 -> env, ebound, true
+                       | BoolV b1, CBool b2 when b1 = b2 -> env, ebound, true
+                       | ListV [], CNull                 -> env, ebound, true
+                       | _                               -> env, ebound, false)
+        | As (p, id) ->
+            (match matching env condv p with
+               _, bounds, false -> env, StrSet.add id bounds, false
+             | _, bounds, _ when StrSet.mem id bounds
+                 -> err "One or more Variables is bound several times"
+             | env', bounds, _ -> (Environment.extend id condv env'), StrSet.add id bounds, true)
+        | Or (p1, p2) ->
+            (match matching env condv p1, matching env condv p2 with
+               (_,b1,_), (_,b2,_) when not (StrSet.equal b1 b2)
+                 -> begin
+                   err "Same variables must occur on both sides of | pattern"
+                 end
+             | (_,b,false), (_,_,false) -> env, b, false
+             | (env',b,true),_ | _,(env',b,true) -> env', b, true)
+        | Lpat ps when (match condv with ListV _ -> true | _ -> false) ->
+            let vs = match condv with ListV x -> x | _ -> assert false in
+            (try
+               let vps = List.combine vs ps in
+               let (env', b', x) =
+               List.fold_left (fun (env, bounds, b) (v, p) ->
+                                 let env', bounds', b' = matching env v p in
+                                 if StrSet.equal (StrSet.inter bounds bounds') ebound then
+                                   env', StrSet.union bounds bounds', b && b'
+                                 else
+                                   err "One or more Variables is bound several times")
+                 (env, ebound, true) vps in
+               (env', b', x)
+             with
+               Invalid_argument _ -> (env, ebound, false))
+        | Lpat _ -> (env, ebound, false)
+      in
       let condv = eval_exp env cond in
-      (match condv with
-         ListV [] -> eval_exp env null_exp
-       | ListV (h::t) ->
-           let newenv = Environment.extendl [h_id;t_id] [h;ListV t] env in
-           eval_exp newenv cons_exp
-       | _ -> err ("Non-list value is matched"))
-        
+      let x =
+        List.fold_left (fun x (p, e) ->
+                          match x with
+                            Some x -> Some x
+                          | None   -> (match matching env condv p with
+                                         (_,_,false) -> None
+                                       | (env',_,_) -> Some (env', e)))
+          None l
+      in
+      match x with
+        Some (env', e) -> eval_exp env' e
+      | None           -> err "Matching fails"
+          
 (* evaluate expressions *)
 and eval_exps env es =  List.map (fun e-> eval_exp env e) es
 
