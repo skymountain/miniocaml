@@ -1,14 +1,15 @@
 (* ML interpreter / type reconstruction *)
-
+exception Parse_error of string
 type id = string
 
+(* binary operator *)    
 type binOp = Plus | Mult | Lt | Band | Bor | Cons
 
+(* pattern expression *)
 type constant =
     CInt of int
   | CBool of bool
   | CNull
-    
 type pattern =
     Wildcard
   | Const of constant
@@ -17,6 +18,11 @@ type pattern =
   | Lpat of pattern list
   | Conspat of pattern * pattern  (* cons pattern *)
   | Varpat of id
+
+(* type *)
+type ty =
+    TyInt
+  | TyBool
       
 type exp =
     Var of id
@@ -45,4 +51,4 @@ type program =
   | Seq of program * program
   (* | RecDecl of letRecBlockSeq *)
 
-exception Parse_error of string
+
