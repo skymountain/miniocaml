@@ -3,18 +3,19 @@ open Eval
 
 let err s = print_endline s
 
-let rec read_eval_print env ch promp =
+let rec read_eval_print env parse lexbuf promp c eof =
   let rec next_eval env =
     print_string promp;
     flush stdout;
     try 
-      let decl = Parser.toplevel Lexer.main (Lexing.from_channel ch) in
+      let decl = parse (Lexer.main eof) lexbuf in
       eval env decl
     with
-      Parsing.Parse_error  -> err "Syntax error"; next_eval env
-    | Lexer.Lexical_error  -> err "Lexical error"; next_eval env
-    | Eval.Error s         -> err s; next_eval env
-    | Syntax.Parse_error s -> err s; next_eval env
+      Parsing.Parse_error   -> err "Syntax error"; cf () env
+    | Lexer.Lexical_error s -> err s; cf () env
+    | Eval.Error s          -> err s; cf () env
+    | Syntax.Parse_error s  -> err s; cf () env
+  and cf () = if c then next_eval else (raise End_of_file)
   in
   let (ids, newenv, vs) = next_eval env in
   List.iter2 (fun id v ->
@@ -23,7 +24,8 @@ let rec read_eval_print env ch promp =
                 print_newline()
              )
     ids vs;
-  read_eval_print newenv ch promp
+  if c then read_eval_print newenv parse lexbuf promp c eof
+  else ()
     
 let initial_env = 
   Environment.extend "i" (IntV 1)
@@ -33,19 +35,31 @@ let initial_env =
              (Environment.extend "iii" (IntV 3)
                 (Environment.extend "iv" (IntV 4) Environment.empty)))))
 
-let read_eval_print env ch promp =
-  try read_eval_print env ch promp with
+let read_eval_print env parse lexbuf promp c eof =
+  try read_eval_print env parse lexbuf promp c eof with
     End_of_file -> ()
 
+let read_all file =
+  let ch = open_in file in
+  let rec f acc =
+    try
+      f (input_line ch::acc)
+    with
+      End_of_file -> acc
+  in
+  let s = String.concat "\n" (List.rev (f [])) in
+  close_in ch;
+  (* print_endline (Printf.sprintf "%s: ->|\n%s\n|<-" file s); *)
+  s
+    
 let _ =
-  if Array.length Sys.argv <= 1 then read_eval_print initial_env stdin "# "
+  if Array.length Sys.argv <= 1 then read_eval_print initial_env Parser.toplevel (Lexing.from_channel stdin) "# " true true
   else
     let files = List.tl (Array.to_list Sys.argv) in
     let f file =
       try
-        let ch = open_in file in
-        read_eval_print initial_env ch "";
-        close_in ch
+        let s = read_all file in
+        read_eval_print initial_env Parser.toplevel_batch (Lexing.from_string s) "" false false;
       with
         Sys_error _ -> err ("Cannot open the file: " ^ file)
     in

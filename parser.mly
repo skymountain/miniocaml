@@ -20,16 +20,23 @@ let to_const =
 %token RARROW FUN DFUN REC
 %token LSQBRA RSQBRA COLON2 SEMI
 %token MATCH WITH PIPE UNDERBAR AS
+%token EOF
 
 %token <int> INTV
 %token <Syntax.id> ID
 
 %start toplevel
 %type <Syntax.program> toplevel
+%start toplevel_batch
+%type <Syntax.program> toplevel_batch
+
 %%
 
 toplevel :
     Decl SEMISEMI { $1 }
+toplevel_batch :
+     toplevel EOF { $1 }
+   | toplevel toplevel_batch { Seq ($1, $2) }
 
 Decl: 
     Expr    { Exp $1 }
@@ -151,15 +158,20 @@ Pattern :
   | Pattern AS ID { As ($1, $3) }
 
 OrPattern :
-    OrPattern PIPE APattern { Or ($1, $3) }
-  | APattern { $1 }
+    OrPattern PIPE ConsPattern { Or ($1, $3) }
+  | ConsPattern { $1 }
 
+ConsPattern :
+    APattern COLON2 ConsPattern { Conspat ($1, $3) }
+  | APattern { $1 }
+      
 APattern :
     UNDERBAR { Wildcard }
   | Constant { Const (to_const $1) }
   | LPAREN Pattern RPAREN { $2 }
   | LSQBRA ListPattern RSQBRA { Lpat $2 }
   | LSQBRA RSQBRA { Lpat [] }
+  | ID { Varpat $1 }
       
 ListPattern :
     Pattern { [$1] }

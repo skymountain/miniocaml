@@ -1,5 +1,5 @@
 {
-exception Lexical_error
+exception Lexical_error of string
   
 let reservedWords = [
   (* Keywords *)
@@ -17,12 +17,14 @@ let reservedWords = [
   ("match", Parser.MATCH);
   ("with" , Parser.WITH);
   ("as"   , Parser.AS);
-] 
+]
+
+let err s = raise (Lexical_error s)
 }
 
-rule main = parse
+rule main raise_eof = parse
   (* ignore spacing and newline characters *)
-  [' ' '\009' '\012' '\n']+     { main lexbuf }
+  [' ' '\009' '\012' '\n']+     { main raise_eof lexbuf }
 
 | "-"? ['0'-'9']+
     { Parser.INTV (int_of_string (Lexing.lexeme lexbuf)) }
@@ -36,7 +38,8 @@ rule main = parse
 | "&&" { Parser.BOOLAND }
 | "||" { Parser.BOOLOR }
 | "="  { Parser.EQ }
-| "(*" { comment 0 lexbuf; main lexbuf }
+| "(*" { comment 0 lexbuf; main raise_eof lexbuf }
+(* | "(\*" { print_endline "comment start"; comment 0 lexbuf; main lexbuf } *)
 | "->" { Parser.RARROW }
 | "["  { Parser.LSQBRA }
 | "]"  { Parser.RSQBRA }
@@ -52,11 +55,16 @@ rule main = parse
       with
       _ -> Parser.ID id
      }
-| eof { raise End_of_file }
-| _   { raise Lexical_error }
+| eof { print_endline "eof"; if raise_eof then raise End_of_file else Parser.EOF }
+| _ as x { err (Printf.sprintf "Lexical error: %c"  x) }
         
-(* skip commet region *)        
+(* skip commet region *)
 and comment depth = parse
     "(*" { comment (depth + 1) lexbuf }
   | "*)" { if depth = 0 then () else comment (depth - 1) lexbuf }
-  | _    { comment depth lexbuf }
+  | eof  { err "Comment not terminated" }
+  | _ { comment depth lexbuf }
+  (*   "(\*" { print_endline "comment inc"; comment (depth + 1) lexbuf } *)
+  (* | "*\)" { if depth = 0 then (print_endline "comment end"; ()) else (print_endline "comment dec"; comment (depth - 1) lexbuf) } *)
+  (* | eof  { err "Comment not terminated" } *)
+  (* | _ as x { print_char x; comment depth lexbuf } *)

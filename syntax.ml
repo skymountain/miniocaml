@@ -15,6 +15,8 @@ type pattern =
   | As of pattern * id
   | Or of pattern * pattern
   | Lpat of pattern list
+  | Conspat of pattern * pattern  (* cons pattern *)
+  | Varpat of id
       
 type exp =
     Var of id
@@ -40,6 +42,7 @@ type letBlockSeq =
 type program = 
     Exp of exp
   | Decl of letBlockSeq
+  | Seq of program * program
   (* | RecDecl of letRecBlockSeq *)
 
 exception Parse_error of string

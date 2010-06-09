@@ -4,14 +4,6 @@ module StrSet = Set.Make (struct
                             type t = string
                             let compare = String.compare
                           end)
-let ebound = StrSet.empty
-
-(* for debug *)
-let print_set s set =
-  print_endline s;
-  StrSet.iter (fun s -> print_string (Printf.sprintf "%s," s)) set;
-  print_newline ();
-  
 type exval = 
     IntV of int
   | BoolV of bool
@@ -22,9 +14,16 @@ and dnval = exval
 
 exception Error of string
 exception Exit 
-  
-let err s = raise (Error s)
 
+(******* misc *******)
+let err s = raise (Error s)
+let ebound = StrSet.empty
+(* for debug *)
+let print_set s set =
+  print_endline s;
+  StrSet.iter (fun s -> print_string (Printf.sprintf "%s," s)) set;
+  print_newline ()
+      
 (* pretty printing *)
 let rec pp_val = function
     IntV i -> 
@@ -111,6 +110,21 @@ let rec eval_exp env = function
       ListV (List.map (eval_exp env) exps)
   (* match *)
   | MatchExp (cond, l) ->
+      let is_ListV = function
+          ListV _ -> true
+        | _ -> false
+      in
+      let get_ListV = function
+          ListV x -> x
+        | _ -> assert false;
+      in
+      (* union of two disjoint sets of bounds *)
+      let union_of_dbounds b1 b2 = 
+        if StrSet.equal (StrSet.inter b1 b2) ebound then
+          StrSet.union b1 b2
+        else
+          err "One or more Variables is bound several times"
+      in
       let rec matching env condv = function
           Wildcard -> env, ebound, true
         | Const c  -> (match condv, c with
@@ -132,22 +146,31 @@ let rec eval_exp env = function
                  end
              | (_,b,false), (_,_,false) -> env, b, false
              | (env',b,true),_ | _,(env',b,true) -> env', b, true)
-        | Lpat ps when (match condv with ListV _ -> true | _ -> false) ->
-            let vs = match condv with ListV x -> x | _ -> assert false in
+        | Lpat ps when is_ListV condv ->
+            let vs = get_ListV condv in
             (try
                let vps = List.combine vs ps in
                let (env', b', x) =
                List.fold_left (fun (env, bounds, b) (v, p) ->
                                  let env', bounds', b' = matching env v p in
-                                 if StrSet.equal (StrSet.inter bounds bounds') ebound then
-                                   env', StrSet.union bounds bounds', b && b'
-                                 else
-                                   err "One or more Variables is bound several times")
+                                 env', union_of_dbounds bounds bounds', b && b')
                  (env, ebound, true) vps in
                (env', b', x)
              with
                Invalid_argument _ -> (env, ebound, false))
         | Lpat _ -> (env, ebound, false)
+        | Conspat (hp, tp) when is_ListV condv ->
+            let v = get_ListV condv in
+            (match v with
+               [] -> (env, ebound, false)
+             | hv::tv ->
+                 let (env'1, bounds'1, b'1), (env'2, bounds'2, b'2) = matching env hv hp, matching env (ListV tv) tp in
+                 let newbonds = union_of_dbounds bounds'1 bounds'2 in
+                 let newenv = StrSet.fold (fun id acc -> Environment.extend id (Environment.lookup id env'2) acc) bounds'2 env'1 in
+                 (newenv, newbonds, b'1 && b'2))
+        | Conspat _ -> (env, ebound, false)
+        | Varpat id ->
+            Environment.extend id condv env, StrSet.add id StrSet.empty, true
       in
       let condv = eval_exp env cond in
       let x =
@@ -219,9 +242,13 @@ and eval_decl ids env vs =
   | (LetRecBlock _) as l    -> eval_letrec_decl ids env vs l
     
 (* evaluate program *)    
-let eval env = function
+let rec eval env = function
     Exp e -> let v = eval_exp env e in (["-"], env, [v])
   | Decl l -> eval_decl [] env [] l
+  | Seq (p1, p2) ->
+      let (ids', env', vs') = eval env p1 in
+      let (ids'', env'', vs'') = eval env' p2 in
+      ids'@ids'', env'', vs'@vs''
   (* | RecDecl l -> eval_recdecl env l *)
         
       (* (id, para, exp) -> *)
