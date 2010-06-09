@@ -32,7 +32,15 @@ let rec pp_val = function
       if b then print_string "true" else print_string "false"
   | ProcV _ -> print_string "<function>"
   | DProcV _ -> print_string "<dfunction>"
-  | ListV vs -> print_string "["; List.iter (fun v -> pp_val v; print_string ";") vs; print_string "]"
+  | ListV x ->
+      let rec f = function
+          [] -> ()
+        | [x] -> pp_val x
+        | h::t -> pp_val h; print_string ";"; f t
+      in
+      print_string "[";
+      f x;
+      print_string "]"
       
 (********************************************************)      
 (************************* eval *************************)
@@ -73,7 +81,7 @@ let rec eval_exp env = function
           | BoolV false -> eval_exp env exp3
           | _ -> err ("Test expression must be boolean: if"))
   (* let id = exp1 and id' = ... in exp2 *)
-  | LetExp (ids, es, exp2) -> 
+  | LetExp (ids, es, exp2) ->
       let vs = eval_exps env es in
       eval_exp (Environment.extendl ids vs env) exp2
   (* fun id -> exp *)

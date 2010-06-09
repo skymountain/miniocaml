@@ -33,27 +33,45 @@ let to_const =
 %%
 
 toplevel :
-    Decl SEMISEMI { $1 }
+    Expr SEMISEMI { Exp $1 }
+  | LetDecl SEMISEMI { Decl $1 }
+/*      
+    Expr SEMISEMI { print_endline "toplevel"; Exp $1 }
+  | LetDecl SEMISEMI { print_endline "toplevel"; Decl $1 }
+*/      
 toplevel_batch :
-     toplevel EOF { $1 }
-   | toplevel toplevel_batch { Seq ($1, $2) }
-
+    toplevel EOF { $1 }
+  | toplevel toplevel_batch { Seq ($1, $2) }
+/*
 Decl: 
     Expr    { Exp $1 }
   | LetDecl { Decl $1 }
-      
+/*      
+    Expr    { print_endline "Expr"; Exp $1 }
+  | LetDecl { print_endline "LetDecl"; Decl $1 }
+*/      
 LetDecl :
   /* let-decl */
-    Let      { let x, y = $1 in (LetBlock (x, y)) }
-  | Let LetDecl { let x, y = $1 in (LetBlockSeq (x, y, $2)) }
+    Let            { let x, y = $1 in (LetBlock (x, y)) }
+  | Let LetDecl    { let x, y = $1 in (LetBlockSeq (x, y, $2)) }
+/*
+    Let            { print_endline "Let"; let x, y = $1 in (LetBlock (x, y)) }
+  | Let LetDecl    { print_endline "Let LetDecl"; let x, y = $1 in (LetBlockSeq (x, y, $2)) }
+*/
   /* let rec-decl */
-  | LetRec { let x, y, z = $1 in (LetRecBlock (x, y, z)) }
+  | LetRec         { let x, y, z = $1 in (LetRecBlock (x, y, z)) }
   | LetRec LetDecl { let x, y, z = $1 in (LetRecBlockSeq (x, y, z, $2)) }  
       
 Let :
     LET Letsub { $2 }
+/*
+    LET Letsub { Printf.printf "1->s:%i,e:%i\n" (Parsing.symbol_start ()) (Parsing.symbol_end ()); $2 }
+*/
 Letsub :
     ID EQ Expr { [$1], [$3] }
+/*
+    ID EQ Expr { Printf.printf "2->s:%i,e:%i\n" (Parsing.symbol_start ()) (Parsing.symbol_end ()); [$1], [$3] }
+*/
   | ID EQ Expr AND Letsub { let ids, exps = $5 in $1::ids, $3::exps }
   | ID IDs EQ Expr { [$1], [to_funexp $2 $4] }
   | ID IDs EQ Expr AND Letsub { let ids, exps = $6 in $1::ids, (to_funexp $2 $4)::exps }
@@ -69,10 +87,14 @@ LetRecsub :
 
 Expr :
     BORExpr { $1 }
+/*  | SExpr { $1 } */
 
 /* let */
 LetExpr :
     Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
+/*
+    Let IN Expr { print_endline "Let Expr"; let x, y = $1 in LetExp (x, y, $3) }
+*/
 LetRecExpr :
     LetRec IN Expr { let x, y, z = $1 in LetRecExp (x, y, z, $3) }
 
@@ -92,9 +114,6 @@ MatchExpr :
 PatternSeq :
     Pattern RARROW Expr { [$1, $3] }
   | Pattern RARROW Expr PIPE PatternSeq { ($1, $3)::$5 }
-    /* MATCH Expr WITH LSQBRA RSQBRA RARROW Expr PIPE ID COLON2 ID RARROW Expr */
-    /* { if $9 = $11 then raise (Syntax.Parse_error "Cannot use same name between a head variable and a tail one.") */
-    /*   else MatchExp ($2, $7, $9, $11, $13) } */
       
 /* basic expression */
 BORExpr :  /* left association */
@@ -123,6 +142,7 @@ MExpr :
 
 AppExpr :
     AppExpr AExpr { AppExp ($1, $2) }
+  | SExpr { $1 } 
   | AExpr { $1 }
       
 AExpr :
@@ -130,7 +150,6 @@ AExpr :
   | ID { Var $1 }
   | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
-  | SExpr { $1 }
 
 Constant :
     INTV { ILit $1 }
