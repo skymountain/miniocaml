@@ -20,9 +20,12 @@ type pattern =
   | Varpat of id
 
 (* type *)
+type tyvar = int
 type ty =
     TyInt
   | TyBool
+  | TyVar of tyvar
+  | TyFun of ty * ty
       
 type exp =
     Var of id
