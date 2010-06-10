@@ -193,7 +193,6 @@ let rec eval_let_decl ids env vs l =
   let f acc_ids env acc_vs = function
       LetBlockSeq (ids, es, r) ->
         let vs = eval_exps env es in
-        (* !! *)
         eval_decl ((List.rev ids)@acc_ids) (Environment.extendl ids vs env) ((List.rev vs)@acc_vs) r
           
     | LetBlock (ids, es) ->
@@ -213,7 +212,7 @@ and eval_letrec_decl ids env vs l =
     | [], [], [] -> List.rev acc_vs
     | _ -> assert false
   in
-  (* evaluate straight "and" bloxks, and extend a environmen with them. *)
+  (* evaluate straight "and" blocks, and extend a environmen with them. *)
   let eval_anddecl env ids paras exps =
     let dummyenv = ref Environment.empty in
     let vs = eval_andexp env [] dummyenv (ids, paras, exps) in
@@ -246,11 +245,3 @@ let rec eval env = function
       let (ids', env', vs') = eval env p1 in
       let (ids'', env'', vs'') = eval env' p2 in
       ids'@ids'', env'', vs'@vs''
-  (* | RecDecl l -> eval_recdecl env l *)
-        
-      (* (id, para, exp) -> *)
-      (* let dummyenv = ref Environment.empty in *)
-      (* let v = ProcV (para, exp, dummyenv) in *)
-      (* let newenv = Environment.extend id v env in *)
-      (* dummyenv := newenv; *)
-      (* [id], newenv, [v] *)

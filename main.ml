@@ -10,7 +10,7 @@ let rec read_eval_print env tyenv parse lexbuf promp c eof =
     flush stdout;
     try 
       let decl = parse (Lexer.main eof) lexbuf in
-      let tret = ty_decl tyenv decl in
+      let tret = ty tyenv decl in
       let eret = eval env decl in
       eret, tret
     with
@@ -21,7 +21,7 @@ let rec read_eval_print env tyenv parse lexbuf promp c eof =
     | Typing.Error s        -> err s; cf () env
   and cf () = if c then next_eval else (raise End_of_file)
   in
-  let (ids, newenv, vs), tys = next_eval env in
+  let (ids, newenv, vs), (tys, tyenv) = next_eval env in
   Misc.iterl3 (fun id v ty->
                  Printf.printf "val %s : " id;
                  pp_tysc ty;
