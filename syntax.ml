@@ -26,6 +26,7 @@ type ty =
   | TyBool
   | TyVar of tyvar
   | TyFun of ty * ty
+  | TyList of ty
       
 type exp =
     Var of id

@@ -1,9 +1,5 @@
 open Syntax 
 
-module StrSet = Set.Make (struct
-                            type t = string
-                            let compare = String.compare
-                          end)
 type exval = 
     IntV of int
   | BoolV of bool
@@ -16,14 +12,11 @@ exception Error of string
 exception Exit 
 
 (******* misc *******)
-let err s = raise (Error s)
-let ebound = StrSet.empty
-(* for debug *)
-let print_set s set =
-  print_endline s;
-  StrSet.iter (fun s -> print_string (Printf.sprintf "%s," s)) set;
-  print_newline ()
-      
+let err s = raise (Error ("Runtime error: "^s))
+module StrSet = Misc.StrSet
+let ebound = Misc.ebound
+let union_of_dbounds b1 b2 = Misc.union_of_dbounds b1 b2 err
+  
 (* pretty printing *)
 let rec pp_val = function
     IntV i -> 
@@ -126,13 +119,7 @@ let rec eval_exp env = function
           ListV x -> x
         | _ -> assert false;
       in
-      (* union of two disjoint sets of bounds *)
-      let union_of_dbounds b1 b2 = 
-        if StrSet.equal (StrSet.inter b1 b2) ebound then
-          StrSet.union b1 b2
-        else
-          err "One or more Variables is bound several times"
-      in
+      (* union of two disjoint sets of bounds *)      
       let rec matching env condv = function
           Wildcard -> env, ebound, true
         | Const c  -> (match condv, c with
@@ -150,7 +137,7 @@ let rec eval_exp env = function
             (match matching env condv p1, matching env condv p2 with
                (_,b1,_), (_,b2,_) when not (StrSet.equal b1 b2)
                  -> begin
-                   err "Same variables must occur on both sides of | pattern"
+                   err "**Same variables must occur on both sides of | pattern**"
                  end
              | (_,b,false), (_,_,false) -> env, b, false
              | (env',b,true),_ | _,(env',b,true) -> env', b, true)
