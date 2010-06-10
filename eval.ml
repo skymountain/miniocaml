@@ -165,7 +165,7 @@ let rec eval_exp env = function
                  (newenv, newbonds, b'1 && b'2))
         | Conspat _ -> (env, ebound, false)
         | Varpat id ->
-            Environment.extend id condv env, StrSet.add id StrSet.empty, true
+            Environment.extend id condv env, StrSet.add id ebound, true
       in
       let condv = eval_exp env cond in
       let x =
@@ -190,9 +190,10 @@ and eval_exps env es =  List.map (fun e-> eval_exp env e) es
   
 (* evaluate (let-)declaretion *)  
 let rec eval_let_decl ids env vs l =
-  let rec f acc_ids env acc_vs = function
+  let f acc_ids env acc_vs = function
       LetBlockSeq (ids, es, r) ->
-        let vs = eval_exps env es in 
+        let vs = eval_exps env es in
+        (* !! *)
         eval_decl ((List.rev ids)@acc_ids) (Environment.extendl ids vs env) ((List.rev vs)@acc_vs) r
           
     | LetBlock (ids, es) ->
@@ -200,6 +201,7 @@ let rec eval_let_decl ids env vs l =
         List.rev (ids@acc_ids), (Environment.extendl ids vs env), List.rev (vs@acc_vs)
     | _ -> assert false;
   in
+  (* !! *)
   f [] env [] l
 and eval_letrec_decl ids env vs l =
   (* evaluate series of expressions with "and" *)

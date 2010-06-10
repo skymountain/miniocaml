@@ -5,19 +5,26 @@ exception Error of string
 let err s = raise (Error s)
 
 (* Type Environment *)
-type tyenv = ty Environment.t
+type tyenv = tysc Environment.t
 (* [idn->tyn] . ... . [id1 -> ty1] (type variable) *)
 type subst = (tyvar * ty) list
-
+    
 let rec str_of_type = function
     TyInt -> "int"
   | TyBool -> "bool"
   | TyVar var -> Printf.sprintf "tv:%d" var
   | TyFun (ty1, ty2) -> Printf.sprintf "( %s -> %s )" (str_of_type ty1) (str_of_type ty2)
   | TyList ty -> (str_of_type ty) ^ " list"
-      
+
+let rec str_of_tysc (TyScheme (vars, ty)) =
+  let varstr = String.concat "," (List.map str_of_type (List.map (fun x -> TyVar x) vars)) in
+  if String.length varstr = 0 then str_of_type ty
+  else Printf.sprintf "|%s| . %s" varstr (str_of_type ty)
+  
 let rec pp_ty ty =
   print_string (str_of_type ty)
+let rec pp_tysc ty =
+  print_string (str_of_tysc ty)
     
 let fresh_tyvar =
   let counter = ref 0 in
@@ -26,13 +33,22 @@ let fresh_tyvar =
     counter := v + 1; v
   in body
 
+let tysc_of_ty ty = TyScheme([], ty)
+       
 let rec freevar_ty = function
     TyInt | TyBool -> MySet.empty
   | TyVar var -> MySet.singleton var
   | TyFun (ty1, ty2) -> MySet.union (freevar_ty ty1) (freevar_ty ty2)
   | TyList ty -> freevar_ty ty
-      
-let rec subst_type s ty = match s with
+
+let freevar_tysc (TyScheme (tyvars, ty)) =
+  MySet.diff (freevar_ty ty) (MySet.from_list tyvars)
+
+let freevar_tyenv tyenv =
+  Environment.fold_right (fun tysc tyvars -> MySet.union (freevar_tysc tysc) tyvars) tyenv MySet.empty
+
+let rec subst_type s ty =
+  match s with
     [] -> ty
   | (id, ty')::t ->
       let rec f = function
@@ -43,6 +59,17 @@ let rec subst_type s ty = match s with
       in
       let newty = f ty in
       subst_type t newty
+
+let closure ty tyenv subst =
+  let fv_tyenv' = freevar_tyenv tyenv in
+  let fv_tyenv =
+    MySet.bigunion
+      (MySet.map
+         (fun id -> freevar_ty (subst_type subst (TyVar id)))
+         fv_tyenv')
+  in
+  let ids = MySet.diff (freevar_ty ty) fv_tyenv in
+  TyScheme (MySet.to_list ids, ty)
         
 let rec subst_types subst = function
     h::t -> (subst_type subst h)::(subst_types subst t)
@@ -70,12 +97,29 @@ let rec unify set =
     [] -> []
   | (ty1, ty2)::t when eq_ty ty1 ty2 -> unify t
   | (ty1, ty2)::t when is_var ty1 ->
+      
+      (* print_string "@@"; *)
+      (* pp_ty ty1; *)
+      (* print_string ", "; *)
+      (* pp_ty ty2; *)
+      (* print_endline "@@"; *)
+      
       let var1 = variable ty1 in
       if MySet.member var1 (freevar_ty ty2) then err "The expression is not typable. Perhaps: impredicative typing"
       else 
         let subst =  (var1, ty2) in
         let subst_comp = [subst] in
-        let newset = List.map (fun (ty1', ty2') -> subst_type subst_comp ty1', subst_type subst_comp ty2') t in
+        let newset = List.map (fun (ty1, ty2) -> subst_type subst_comp ty1, subst_type subst_comp ty2) t in
+
+        (* print_string "+++after substitution start+++\n"; *)
+        (* List.iter (fun (ty1, ty2) -> *)
+        (*              print_string ">>"; *)
+        (*              pp_ty ty1; *)
+        (*              print_string ", "; *)
+        (*              pp_ty ty2; *)
+        (*              print_endline "<<") newset; *)
+        (* print_string "+++after substitution end+++\n"; *)
+        
         subst::(unify newset)
   | (ty1, ty2)::t when is_var ty2 ->
       unify ((ty2, ty1)::t)
@@ -91,11 +135,20 @@ let rec eqs_of_subst = function
 
 let unify_neweqs subst eqs = unify (eqs@(eqs_of_subst subst))
 let unify_neweq subst eq = unify_neweqs subst [eq]
-      
+
+(* for debug *)
+(* let pp_subst subst = *)
+(*   print_endline "---subst start---"; *)
+(*   let rec f = function *)
+(*       [] -> print_endline "---subst end---" *)
+(*     | (v,t)::tys -> Printf.printf "tvar: %d, type: %s\n" v (str_of_type t); f tys *)
+(*   in *)
+(*   f subst *)
+  
 let ty_prim op subst ty1 ty2 : Syntax.ty * (Syntax.tyvar * Syntax.ty) list=
   let f arg1_ty arg2_ty concl_ty =
     let subst = unify_neweqs subst [ty1, arg1_ty; ty2, arg2_ty] in
-    concl_ty, subst
+    subst_type subst concl_ty, subst
   in
   match op with
     Plus | Mult -> f TyInt TyInt TyInt 
@@ -105,9 +158,21 @@ let ty_prim op subst ty1 ty2 : Syntax.ty * (Syntax.tyvar * Syntax.ty) list=
       let varty = TyVar (fresh_tyvar ()) in
       f varty (TyList varty) (TyList varty)
 
-let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list = function
+let rec ty_exp_expectty tyenv subst exp expectty =
+  let ty, subst = ty_exp tyenv subst exp in
+  (* print_endline "___start____"; *)
+  (* let subst = unify_neweq subst (ty, expectty) in *)
+  (* print_endline "___end____"; *)
+  (* ty, subst *)
+  ty, unify_neweq subst (ty, expectty)
+and ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
+    (* transform each of bound type variable into a fresh type variable *)
     Var x ->
-      (try subst_type subst (Environment.lookup x tyenv), subst with
+      (try
+         let TyScheme (vars, ty) = Environment.lookup x tyenv in
+         let subst' = List.map (fun id -> (id, TyVar (fresh_tyvar ()))) vars in
+         subst_type subst' ty, subst
+       with
          Environment.Not_bound -> err ("Variable not bound: " ^ x))
   | ILit _ -> TyInt, subst
   | BLit _ -> TyBool, subst
@@ -116,68 +181,120 @@ let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list
       let tyarg2, subst2 = ty_exp tyenv subst1 exp2 in
       ty_prim op subst2 tyarg1 tyarg2
   | IfExp (cond, exp1, exp2) ->
-      let condty, condsubst = ty_exp tyenv subst cond in
-      if subst_type condsubst condty <> TyBool then
-        err ("Type of test expression must be boolean: if")
-      else
-        let ty1, subst1 = ty_exp tyenv condsubst exp1 in
-        let ty2, subst2 = ty_exp tyenv subst1 exp2 in
-        if subst_type subst2 ty1 <> subst_type subst2 ty2 then
-          err ("Both then and else expressions must be same type")
-        else ty1, subst2
+      let condty = TyBool in
+      let condty, subst = ty_exp_expectty tyenv subst cond condty in
+      let ety = TyVar (fresh_tyvar ()) in
+      let ety, subst = ty_exp_expectty tyenv subst exp1 ety in
+      let ety, subst = ty_exp_expectty tyenv subst exp2 ety in
+      subst_type subst ety, subst
+      
+      (* print_string "--- if start ---\n"; *)
+      (* pp_ty ety; *)
+            
+      (* let _, subst = ty_exp_expectty tyenv subst exp1 ety in *)
+
+      (* pp_subst subst; *)
+
+      (* print_string "||| pp_subst start |||\n"; *)
+      (* pp_ty (subst_type subst ety); *)
+      (* print_string "\n||| pp_subst end |||\n"; *)
+      (* print_string ", "; *)
+      
+      (* let _, subst = ty_exp_expectty tyenv subst exp2 ety in *)
+
+      (* pp_subst subst; *)
+
+      (* print_string "||| pp_subst start |||\n"; *)
+      (* pp_ty (subst_type subst ety); *)
+      (* print_string "||| pp_subst end |||\n"; *)
+      (* print_string "--- if end ---\n"; *)
+      
+      (* subst_type subst ety, subst *)
+
+      (******************************)
+      
+      (* let ety1 = TyVar (fresh_tyvar ()) in *)
+      (* let ety2 = TyVar (fresh_tyvar ()) in *)
+      (* let ety1', subst = ty_exp_expectty tyenv subst exp1 ety1 in *)
+      (* let ety2', subst = ty_exp_expectty tyenv subst exp2 ety2 in *)
+
+      (* print_string "1: "; *)
+      (* pp_ty (subst_type subst ety1); *)
+      (* print_string ", "; *)
+      (* pp_ty ety1'; *)
+
+      (* print_string ",  2: "; *)
+      (* pp_ty (subst_type subst ety2); *)
+      (* print_string ", "; *)
+      (* pp_ty ety2'; *)
+      
+      (* let subst = unify_neweq subst (ety1, ety2) in *)
+
+      (* print_string ",  subst: ety1::"; *)
+      (* pp_ty (subst_type subst ety1); *)
+      (* print_string ",  ety2::"; *)
+      (* pp_ty (subst_type subst ety2); *)
+      (* print_newline (); *)
+
+
+      (* let ety1 = ety1' in *)
+      (* let ety2 = ety2' in *)
+      (* let subst = unify_neweq subst (ety1, ety2) in *)
+      
+      (* subst_type subst ety2, subst *)
   | LetExp (ids, es, exp2) ->
       let tys, subst' = ty_exps tyenv subst es in
-      let newtyenv = Environment.extendl ids tys tyenv in
+      let tyscs = List.map (fun ty -> closure ty tyenv subst') tys in
+      let newtyenv = Environment.extendl ids tyscs tyenv in
       ty_exp newtyenv subst' exp2
   | FunExp (id, exp) ->
       let tyvar = TyVar (fresh_tyvar ()) in
-      let retty, subst' = ty_exp (Environment.extend id tyvar tyenv) subst exp in
-      (* TyFun (subst_type subst' tyvar, retty), subst' *)
-      TyFun (tyvar, retty), subst'
-        
-  (* | AppExp (exp1, exp2) -> *)
-  (*     let is_fun = function TyFun _ -> true | _ -> false in *)
-  (*     let func = function TyFun (arg, ret) -> arg, ret | _ -> assert false in *)
-  (*     let ty1, subst1 = ty_exp tyenv subst exp1 in *)
-  (*     let fty = subst_type subst1 ty1 in *)
-  (*     if not (is_fun fty) then err "Non-function value cannot be applied" *)
-  (*     else *)
-  (*       let ty2, subst2 = ty_exp tyenv subst1 exp2 in *)
-  (*       let fargty, retty = func fty in *)
-  (*       let aargty = subst_type subst2 ty2 in  *)
-  (*       if eq_ty fargty aargty then fty, subst2 *)
-  (*       else *)
-  (*         err (Printf.sprintf "Expected type: %s, actual type: %s" *)
-  (*                (str_of_type fargty) (str_of_type aargty)) *)
-
+      let retty, subst = ty_exp (Environment.extend id (tysc_of_ty tyvar) tyenv) subst exp in
+      subst_type subst (TyFun (tyvar, retty)), subst
+  | AppExp (exp1, exp2) ->      
+      let argty = TyVar (fresh_tyvar ()) in
+      let retty = TyVar (fresh_tyvar ()) in
+      let fty = TyFun (argty, retty) in
+      let fty, subst1 = ty_exp_expectty tyenv subst exp1 fty in
+      let argty, subst2 = ty_exp_expectty tyenv subst1 exp2 argty in
+      subst_type subst2 retty, subst2
   | LetRecExp (ids, args, bodies, exp) ->
-      let f id arg body subst =
-        let argvar = TyVar (fresh_tyvar ()) in
-        let retvar = TyVar (fresh_tyvar ()) in
-        let idty = TyFun (argvar, retvar) in
-        let tyenv' = Environment.extend id idty tyenv in
-        let tyenv' = Environment.extend arg argvar tyenv' in
-        let bty, newsubst = ty_exp tyenv' subst body in
-        TyFun (argvar, bty), unify_neweq newsubst (retvar, idty)
+      let sigtys =
+        List.fold_left (fun acc _ ->
+                          let argvar = TyVar (fresh_tyvar ()) in
+                          let retvar = TyVar (fresh_tyvar ()) in
+                          let idty = TyFun (argvar, retvar) in
+                          (argvar, retvar, idty)::acc) [] ids
+      in
+      let idtyscs = List.map (fun (_,_,x) -> tysc_of_ty x) sigtys in
+      let f id arg body subst (argvar, retvar, idty) =
+        (* let argvar = TyVar (fresh_tyvar ()) in *)
+        (* let retvar = TyVar (fresh_tyvar ()) in *)
+        (* let idty = TyFun (argvar, retvar) in *)
+        let tyenv = Environment.extendl ids idtyscs tyenv in
+        let tyenv = Environment.extend id (tysc_of_ty idty) tyenv in
+        let tyenv = Environment.extend arg (tysc_of_ty argvar) tyenv in
+        let bty, subst = ty_exp tyenv subst body in
+        let subst = unify_neweq subst (retvar, bty) in
+        subst_type subst idty, subst
       in
       let tys, newsubst =
-        List.fold_right (fun (id,arg,body) (tys, subst') ->
-                           let ty, newsubst = f id arg body subst in
+        List.fold_right (fun (id,arg,body,sigty) (tys, subst) ->
+                           let ty, newsubst = f id arg body subst sigty in
                            ty::tys, newsubst)
-          (Misc.combine3 ids args bodies) ([], subst) 
+          (Misc.combine4 ids args bodies sigtys) ([], subst) 
       in
-      let newtyenv = Environment.extendl ids tys tyenv in
+      let tyscs = List.map (fun x -> closure x tyenv newsubst) tys in
+      let newtyenv = Environment.extendl ids tyscs tyenv in
       ty_exp newtyenv newsubst exp
   | LLit [] ->
-      TyList (TyVar (fresh_tyvar ())), subst
+      subst_type subst (TyList (TyVar (fresh_tyvar ()))), subst
   | LLit (fexp::exps) ->
-      let fty, newsubst = ty_exp tyenv subst fexp in
-      let tys, newsubst = ty_exps tyenv newsubst exps in
-      let fty = subst_type newsubst fty in
-      if List.for_all (fun ty -> eq_ty fty (subst_type newsubst ty)) tys then
-        TyList fty, newsubst
-      else
-        err ("All elements of List must be same type")
+      let fty, subst = ty_exp tyenv subst fexp in
+      let tys, subst = ty_exps tyenv subst exps in
+      let eqs = List.map (fun ty -> (fty,ty)) tys in
+      let subst = unify_neweqs subst eqs in
+      subst_type subst (TyList fty), subst
   | MatchExp (cond, pat_exps) ->
       let condty, newsubst = ty_exp tyenv subst cond in
       let condty = subst_type newsubst condty in
@@ -186,7 +303,7 @@ let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list
         | CBool _ -> TyBool
         | CNull -> TyList (TyVar (fresh_tyvar ()))
       in
-      let rec ty_pattern tyenv subst condty = function
+      let rec ty_pattern (tyenv : Syntax.tysc Environment.t) subst condty = function
           Wildcard -> tyenv, subst, Misc.ebound
         | Const c  -> (match condty, c with
                          TyInt, CInt _ -> tyenv, subst, Misc.ebound
@@ -199,23 +316,30 @@ let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list
             let newtyenv, newsubst, bounds = ty_pattern tyenv subst condty p in
             if StrSet.mem id bounds then err "One or more Variables is bound several times"
             else
-              Environment.extend id condty tyenv, newsubst, StrSet.add id bounds
+              Environment.extend id (tysc_of_ty condty) tyenv, newsubst, StrSet.add id bounds
         | Or (p1, p2) ->
-            let tyenv1, subst1, b1 = ty_pattern tyenv subst condty p1 in
-            let tyenv2, subst2, b2 = ty_pattern tyenv subst1 condty p2 in
+            let tyenv1, subst, b1 = ty_pattern tyenv subst condty p1 in
+            let tyenv2, subst, b2 = ty_pattern tyenv subst condty p2 in
             if not (StrSet.equal b1 b2) then err "Same variables must occur on both sides of | pattern"
             else
+              let ty_of_tysc = function
+                  TyScheme ([], ty) -> ty
+                | _ -> assert false
+              in
               let bvars, btys1, btys2 = (StrSet.fold (fun x (bvars, ty1s, ty2s) ->
                                                         x::bvars,
                                                         (Environment.lookup x tyenv1)::ty1s,
                                                         (Environment.lookup x tyenv2)::ty2s)
                                            b1 ([], [], []))
               in
-              let btys1, btys2 = subst_types subst2 btys1, subst_types subst2 btys2 in
-              if not (eq_tys btys1 btys2) then
-                err "Each variable must have same type on both sides of | pattern"
-              else 
-                Environment.extendl bvars btys1 tyenv, subst2, b1
+              let subst = unify_neweqs subst (List.combine (List.map ty_of_tysc btys1) (List.map ty_of_tysc btys2)) in
+              Environment.extendl bvars btys1 tyenv(*tyenv1*), subst, b1
+                
+              (* let btys1, btys2 = subst_types subst2 btys1, subst_types subst2 btys2 in *)
+              (* if not (eq_tys btys1 btys2) then *)
+              (*   err "Each variable must have same type on both sides of | pattern" *)
+              (* else  *)
+              (*   Environment.extendl bvars btys1 tyenv, subst2, b1 *)
         | Lpat ps ->
             ty_pattern tyenv subst condty (List.fold_right (fun p acc -> Conspat (p, acc)) ps (Const CNull))
         | Conspat (hp, tp) ->
@@ -236,7 +360,7 @@ let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list
             let newtyenv, newsubst, bounds'' = ty_pattern tyenv' subst' condty tp in
             newtyenv, newsubst, Misc.union_of_dbounds bounds' bounds'' err
         | Varpat id ->
-            Environment.extend id condty tyenv, subst, Misc.ebound
+            Environment.extend id (tysc_of_ty condty) tyenv, subst, StrSet.add id StrSet.empty
       in
       let ty_exp tyenv subst condty p exp =
         let newtyenv, newsubst, _ = ty_pattern tyenv subst condty p in
@@ -253,16 +377,31 @@ let rec ty_exp tyenv (subst : (tyvar * ty) list) : exp -> ty * (tyvar * ty) list
                                               err "Each of pattern expression must have same type"
                                             else newsubst) fsubst pat_exps
            in
-           fexpty, newsubst
+           subst_type newsubst fexpty, newsubst
        | _ -> assert false)
-  | _ -> err ("Not Implemented!")
-      
+  | DFunExp _ -> err "Not implemented !"
 and ty_exps tyenv subst exps =
   List.fold_right (fun exp (tys, subst) ->
                      let ty, newsubst = ty_exp tyenv subst exp in
                      ty::tys, newsubst)
     exps ([], subst)
-      
+
+(* let rec ty_letdecl ids tyenv tys = *)
+(*   function *)
+(*     LetBlock _ as l    | LetBlockSeq _ as l    -> ty_let_decl l *)
+(*   | LetRecBlock _ as l | LetRecBlockSeq _ as l -> ty_letrec_decl l *)
+(* and ty_let_decl acc_ids tyenv acc_tys = function *)
+(*     LetBlockSeq (ids, es, r) -> *)
+(*       let tys = ty_exps tyenv es in *)
+(*       let tys = List.map (fun ty -> closure ty tyenv []) tys in *)
+(*       ty_letdecl ((List.rev ids)@acc_ids) (Environment.extendl ids tys tyenv) ((List.rev tys)@acc_tys) r *)
+(*   | LetBlock (ids, es) -> *)
+(*       let tys = ty_exps env es in *)
+(*       List.rev (ids@acc_ids), (Environment.extendl ids vs env), List.rev (vs@acc_vs) *)
+(* and ty_letrec_decl  acc_ids tyenv acc_tys = function *)
+    
+  
 let ty_decl tyenv = function
-    Exp e -> [ty_exp tyenv [] e]
-  | _ -> err ("Not Implemented!")
+    Exp e -> let ty, subst = ty_exp tyenv [] e in [closure ty tyenv subst]
+  (* | Decl l -> *)
+  (* | Seq (p1, p2) ->  *)

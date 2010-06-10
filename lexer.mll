@@ -55,7 +55,7 @@ rule main raise_eof = parse
       with
       _ -> Parser.ID id
      }
-| eof { print_endline "eof"; if raise_eof then raise End_of_file else Parser.EOF }
+| eof { if raise_eof then raise End_of_file else Parser.EOF }
 | _ as x { err (Printf.sprintf "Lexical error: %c"  x) }
         
 (* skip commet region *)

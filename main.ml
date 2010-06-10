@@ -10,7 +10,9 @@ let rec read_eval_print env tyenv parse lexbuf promp c eof =
     flush stdout;
     try 
       let decl = parse (Lexer.main eof) lexbuf in
-      eval env decl, ty_decl tyenv decl
+      let tret = ty_decl tyenv decl in
+      let eret = eval env decl in
+      eret, tret
     with
       Parsing.Parse_error   -> err "Syntax error"; cf () env
     | Lexer.Lexical_error s -> err s; cf () env
@@ -20,9 +22,9 @@ let rec read_eval_print env tyenv parse lexbuf promp c eof =
   and cf () = if c then next_eval else (raise End_of_file)
   in
   let (ids, newenv, vs), tys = next_eval env in
-  Misc.iterl3 (fun id v (ty, subst) ->
+  Misc.iterl3 (fun id v ty->
                  Printf.printf "val %s : " id;
-                 pp_ty (subst_type subst ty);
+                 pp_tysc ty;
                  print_string " = ";
                  pp_val v;
                  print_newline()
@@ -40,12 +42,12 @@ let initial_env =
                 (Environment.extend "iv" (IntV 4) Environment.empty)))))
 
 let initial_tyenv = 
-  Environment.extend "i" TyInt
-    (Environment.extend "v" TyInt
-       (Environment.extend "x" TyInt
-          (Environment.extend "ii" TyInt
-             (Environment.extend "iii" TyInt
-                (Environment.extend "iv" TyInt Environment.empty)))))
+  Environment.extend "i" (tysc_of_ty TyInt)
+    (Environment.extend "v" (tysc_of_ty TyInt)
+       (Environment.extend "x" (tysc_of_ty TyInt)
+          (Environment.extend "ii" (tysc_of_ty TyInt)
+             (Environment.extend "iii" (tysc_of_ty TyInt)
+                (Environment.extend "iv" (tysc_of_ty TyInt) Environment.empty)))))
 
 let read_eval_print env tyenv parse lexbuf promp c eof =
   try read_eval_print env tyenv parse lexbuf promp c eof with

@@ -12,6 +12,10 @@ let rec combine3 x y z = match x, y, z with
     xh::xt, yh::yt, zh::zt -> (xh,yh,zh)::(combine3 xt yt zt)
   | [],[],[] -> []
   | _, _, _ -> raise (Invalid_argument "Misc.combine3")
+let rec combine4 w x y z = match w, x, y, z with
+    wh::wt, xh::xt, yh::yt, zh::zt -> (wh,xh,yh,zh)::(combine4 wt xt yt zt)
+  | [], [],[],[] -> []
+  | _, _, _, _ -> raise (Invalid_argument "Misc.combine3")
 
 let ebound = StrSet.empty
   

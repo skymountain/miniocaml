@@ -27,6 +27,8 @@ type ty =
   | TyVar of tyvar
   | TyFun of ty * ty
   | TyList of ty
+
+type tysc = TyScheme of tyvar list * ty
       
 type exp =
     Var of id
