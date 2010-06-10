@@ -70,7 +70,9 @@ let closure ty tyenv subst =
   in
   let ids = MySet.diff (freevar_ty ty) fv_tyenv in
   TyScheme (MySet.to_list ids, ty)
-        
+
+let closure_tys tyenv subst tys = List.map (fun x -> closure x tyenv subst) tys
+    
 let rec subst_types subst = function
     h::t -> (subst_type subst h)::(subst_types subst t)
   | []   -> []
@@ -126,7 +128,7 @@ let rec unify set =
   | (TyFun (argty1, retty1), TyFun (argty2, retty2))::t ->
       unify ((argty1, argty2)::(retty1, retty2)::t)
   | (TyList ty1, TyList ty2)::t -> unify ((ty1, ty2)::t)
-  | _ -> err "Fail to unify type expressions"
+  | _ -> err "Fail to unify type expression"
   
 (* substitution -> equation set *)
 let rec eqs_of_subst = function
@@ -144,7 +146,30 @@ let unify_neweq subst eq = unify_neweqs subst [eq]
 (*     | (v,t)::tys -> Printf.printf "tvar: %d, type: %s\n" v (str_of_type t); f tys *)
 (*   in *)
 (*   f subst *)
-  
+
+let unify_with_sign subst tys signs =
+  List.map
+    (fun (ty, sign) -> match sign with
+       Some sign -> subst_type (unify_neweq subst (ty, sign)) ty
+     | None      -> ty)
+    (List.combine tys signs)
+
+let unify_with_retsig subst tys retsigs =
+  let rec to_retty = function
+      TyFun (paraty, retty) -> (match retty with
+                             TyFun _ -> (fun x -> TyFun (paraty, to_retty retty x))
+                           | t -> (fun x -> TyFun (paraty, x)))
+    | _ -> assert false
+  in
+  let rettys = List.map to_retty tys in
+  let signs = List.map (fun (retty, retsig) ->
+                          match retsig with
+                            None -> None
+                          | Some t -> Some (retty t)) (List.combine rettys retsigs)
+  in
+  unify_with_sign subst tys signs
+
+    
 let ty_prim op subst ty1 ty2 : Syntax.ty * (Syntax.tyvar * Syntax.ty) list=
   let f arg1_ty arg2_ty concl_ty =
     let subst = unify_neweqs subst [ty1, arg1_ty; ty2, arg2_ty] in
@@ -235,13 +260,14 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
       (* let subst = unify_neweq subst (ety1, ety2) in *)
       
       (* subst_type subst ety2, subst *)
-  | LetExp (ids, es, exp2) ->
-      let tys, subst' = ty_exps tyenv subst es in
-      let tyscs = List.map (fun ty -> closure ty tyenv subst') tys in
+  | LetExp (ids, es, retsigs, exp2) ->
+      let tys, subst = ty_exps tyenv subst es in
+      let tys = unify_with_retsig subst tys retsigs in
+      let tyscs = closure_tys tyenv subst tys in
       let newtyenv = Environment.extendl ids tyscs tyenv in
-      ty_exp newtyenv subst' exp2
-  | FunExp (id, exp) ->
-      let tyvar = TyVar (fresh_tyvar ()) in
+      ty_exp newtyenv subst exp2
+  | FunExp (id, paraty, exp) ->
+      let tyvar = match paraty with None -> TyVar (fresh_tyvar ()) | Some t -> t in
       let retty, subst = ty_exp (Environment.extend id (tysc_of_ty tyvar) tyenv) subst exp in
       subst_type subst (TyFun (tyvar, retty)), subst
   | AppExp (exp1, exp2) ->      
@@ -251,7 +277,7 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
       let fty, subst1 = ty_exp_expectty tyenv subst exp1 fty in
       let argty, subst2 = ty_exp_expectty tyenv subst1 exp2 argty in
       subst_type subst2 retty, subst2
-  | LetRecExp (ids, args, bodies, exp) ->
+  | LetRecExp (ids, args, paratys, bodies, retsigs, exp) ->
       (* let sigtys = *)
       (*   List.fold_left (fun acc _ -> *)
       (*                     let argvar = TyVar (fresh_tyvar ()) in *)
@@ -279,9 +305,11 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
       (* in *)
       (* let tyscs = List.map (fun x -> closure x tyenv newsubst) tys in *)
       (* let newtyenv = Environment.extendl ids tyscs tyenv in *)      
-      let tyscs, newsubst = ty_letrec tyenv subst ids args bodies in
-      let newtyenv = Environment.extendl ids tyscs tyenv in
-      ty_exp newtyenv newsubst exp
+      let tys, subst = ty_letrec tyenv subst ids args paratys bodies in
+      let tys = unify_with_retsig subst tys retsigs in
+      let tyscs = closure_tys tyenv subst tys in
+      let tyenv = Environment.extendl ids tyscs tyenv in
+      ty_exp tyenv subst exp
   | LLit [] ->
       subst_type subst (TyList (TyVar (fresh_tyvar ()))), subst
   | LLit (fexp::exps) ->
@@ -374,6 +402,10 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
            in
            subst_type newsubst fexpty, newsubst
        | _ -> assert false)
+  | TypedExp (exp, ty) ->
+      let ety, subst = ty_exp tyenv subst exp in
+      let subst = unify_neweq subst (ety, ty) in
+      ty, subst
   | DFunExp _ -> err "Not implemented !"
 
 and ty_exp_expectty tyenv subst exp expectty =
@@ -390,60 +422,64 @@ and ty_exps tyenv subst exps =
                      ty::tys, newsubst)
     exps ([], subst)
 
-and ty_letrec tyenv subst ids args bodies =
+and ty_letrec tyenv subst ids args paratys bodies =
   let sigtys =
-        List.fold_left (fun acc _ ->
-                          let argvar = TyVar (fresh_tyvar ()) in
-                          let retvar = TyVar (fresh_tyvar ()) in
-                          let idty = TyFun (argvar, retvar) in
-                          (argvar, retvar, idty)::acc) [] ids
-      in
-      let idtyscs = List.map (fun (_,_,x) -> tysc_of_ty x) sigtys in
-      let f id arg body subst (argvar, retvar, idty) =
-        (* let argvar = TyVar (fresh_tyvar ()) in *)
-        (* let retvar = TyVar (fresh_tyvar ()) in *)
-        (* let idty = TyFun (argvar, retvar) in *)
-        let tyenv = Environment.extendl ids idtyscs tyenv in
-        let tyenv = Environment.extend id (tysc_of_ty idty) tyenv in
-        let tyenv = Environment.extend arg (tysc_of_ty argvar) tyenv in
-        let bty, subst = ty_exp tyenv subst body in
-        let subst = unify_neweq subst (retvar, bty) in
-        subst_type subst idty, subst
-      in
-      let tys, newsubst =
-        List.fold_right (fun (id,arg,body,sigty) (tys, subst) ->
-                           let ty, newsubst = f id arg body subst sigty in
-                           ty::tys, newsubst)
-          (Misc.combine4 ids args bodies sigtys) ([], subst) 
-      in
-      let tyscs = List.map (fun x -> closure x tyenv newsubst) tys in
-      tyscs, newsubst
-    
+    List.fold_left (fun acc paraty ->
+                      let argvar = match paraty with None -> TyVar (fresh_tyvar ()) | Some t -> t in
+                      let retvar = TyVar (fresh_tyvar ()) in
+                      let idty = TyFun (argvar, retvar) in
+                      (argvar, retvar, idty)::acc) [] paratys
+  in
+  let idtyscs = List.map (fun (_,_,x) -> tysc_of_ty x) sigtys in
+  let f id arg body subst (argvar, retvar, idty) =
+    (* let argvar = TyVar (fresh_tyvar ()) in *)
+    (* let retvar = TyVar (fresh_tyvar ()) in *)
+    (* let idty = TyFun (argvar, retvar) in *)
+    let tyenv = Environment.extendl ids idtyscs tyenv in
+    let tyenv = Environment.extend id (tysc_of_ty idty) tyenv in
+    let tyenv = Environment.extend arg (tysc_of_ty argvar) tyenv in
+    let bty, subst = ty_exp tyenv subst body in
+    let subst = unify_neweq subst (retvar, bty) in
+    subst_type subst idty, subst
+  in
+  let tys, newsubst =
+    List.fold_right (fun (id,arg,body,sigty) (tys, subst) ->
+                       let ty, newsubst = f id arg body subst sigty in
+                       ty::tys, newsubst)
+      (Misc.combine4 ids args bodies sigtys) ([], subst) 
+  in
+  tys, newsubst
+
 let rec ty_decl ids tyenv tyscs =
   function
     LetBlock _    | LetBlockSeq _    as l -> ty_let_decl    ids tyenv tyscs l
   | LetRecBlock _ | LetRecBlockSeq _ as l -> ty_letrec_decl ids tyenv tyscs l
       
 and ty_let_decl acc_ids tyenv acc_tyscs =
-  let f ids es =
-    let tyscs, _ = ty_exps tyenv [] es in
-    List.map (fun ty -> closure ty tyenv []) tyscs
+  let f ids es retsigs =
+    let tys, subst = ty_exps tyenv [] es in
+    let tys = unify_with_retsig subst tys retsigs in
+    closure_tys tyenv [] tys 
   in
   function
-    LetBlockSeq (ids, es, r) ->
-      let tyscs = f ids es in
+    LetBlockSeq (ids, es, rettys, r) ->
+      let tyscs = f ids es rettys in
       ty_decl ((List.rev ids)@acc_ids) (Environment.extendl ids tyscs tyenv) ((List.rev tyscs)@acc_tyscs) r
-  | LetBlock (ids, es) ->
-      let tyscs = f ids es in
+  | LetBlock (ids, es, rettys) ->
+      let tyscs = f ids es rettys in
       List.rev (tyscs@acc_tyscs), (Environment.extendl ids tyscs tyenv)
   | _ -> assert false
       
 and ty_letrec_decl  acc_ids tyenv acc_tyscs = function
-    LetRecBlockSeq (ids, paras, bodies, r) ->
-      let tyscs, _ = ty_letrec tyenv [] ids paras bodies in
+    LetRecBlockSeq (ids, paras, paratys, bodies, retsigs, r) ->
+      let tys, subst = ty_letrec tyenv [] ids paras paratys bodies in
+      let tys = unify_with_retsig subst tys retsigs in
+      let tyscs = closure_tys tyenv subst tys in
       ty_decl ((List.rev ids)@acc_ids) (Environment.extendl ids tyscs tyenv) (List.rev (tyscs@acc_tyscs)) r 
-  | LetRecBlock (ids, paras, bodies) ->
-      let tyscs, _ = ty_letrec tyenv [] ids paras bodies in
+  | LetRecBlock (ids, paras, paratys, bodies, retsigs) ->
+      let tys, subst = ty_letrec tyenv [] ids paras paratys bodies in
+      let tys = unify_with_retsig subst tys retsigs in
+      let tyscs = closure_tys tyenv subst tys in
       List.rev (tyscs@acc_tyscs), Environment.extendl ids tyscs tyenv
   | _ -> assert false
       

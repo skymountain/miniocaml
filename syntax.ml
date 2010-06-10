@@ -36,25 +36,25 @@ type exp =
   | BLit of bool
   | BinOp of binOp * exp * exp
   | IfExp of exp * exp * exp
-  | LetExp of id list * exp list * exp
-  | FunExp of id * exp
+  | LetExp of id list * exp list * ty option list * exp
+  | FunExp of id * ty option * exp
   | AppExp of exp * exp
   | DFunExp of id * exp
-  | LetRecExp of id list * id list * exp list * exp
+  | LetRecExp of id list * id list * ty option list * exp list * ty option list * exp
   | LLit of exp list 
   (* | MatchExp of exp * exp * id * id * exp (\* match exp with [] -> exp | id::id -> exp *\) *)
   | MatchExp of exp * (pattern * exp) list
-      
+  | TypedExp of exp * ty
+
 type letBlockSeq =
-    LetBlockSeq of id list * exp list * letBlockSeq
-  | LetBlock of id list * exp list (* ids declared with "and" simultaneously *)
-  | LetRecBlockSeq of id list * id list * exp list * letBlockSeq
-  | LetRecBlock of id list * id list * exp list
+    LetBlockSeq of id list * exp list * ty option list * letBlockSeq
+  | LetBlock of id list * exp list * ty option list (* ids declared with "and" simultaneously *)
+  | LetRecBlockSeq of id list * id list * ty option list * exp list * ty option list * letBlockSeq
+  | LetRecBlock of id list * id list * ty option list * exp list * ty option list
       
 type program = 
     Exp of exp
   | Decl of letBlockSeq
   | Seq of program * program
-  (* | RecDecl of letRecBlockSeq *)
 
 

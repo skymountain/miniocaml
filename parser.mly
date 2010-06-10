@@ -1,9 +1,9 @@
 %{
 open Syntax
 
-let to_funexp' ids exp f =
-  List.fold_left (fun acc id -> f id acc) exp (List.rev ids)
-let to_funexp ids exp = to_funexp' ids exp (fun id acc -> FunExp (id, acc))
+let to_funexp' xs exp f =
+  List.fold_left (fun acc x -> f x acc) exp (List.rev xs)
+let to_funexp x exp = to_funexp' x exp (fun (id, paraty) acc -> FunExp (id, paraty, acc))
 let to_dfunexp ids exp = to_funexp' ids exp (fun id acc -> DFunExp (id, acc))
 let to_const =
   function
@@ -20,6 +20,7 @@ let to_const =
 %token RARROW FUN DFUN REC
 %token LSQBRA RSQBRA COLON2 SEMI
 %token MATCH WITH PIPE UNDERBAR AS
+%token COLON LIST INT BOOL
 %token EOF
 
 %token <int> INTV
@@ -52,15 +53,15 @@ Decl:
 */      
 LetDecl :
   /* let-decl */
-    Let            { let x, y = $1 in (LetBlock (x, y)) }
-  | Let LetDecl    { let x, y = $1 in (LetBlockSeq (x, y, $2)) }
+    Let            { let x, y, z = $1 in (LetBlock (x, y, z)) }
+  | Let LetDecl    { let x, y, z = $1 in (LetBlockSeq (x, y, z, $2)) }
 /*
     Let            { print_endline "Let"; let x, y = $1 in (LetBlock (x, y)) }
   | Let LetDecl    { print_endline "Let LetDecl"; let x, y = $1 in (LetBlockSeq (x, y, $2)) }
 */
   /* let rec-decl */
-  | LetRec         { let x, y, z = $1 in (LetRecBlock (x, y, z)) }
-  | LetRec LetDecl { let x, y, z = $1 in (LetRecBlockSeq (x, y, z, $2)) }  
+  | LetRec         { let x, y, z, a, b = $1 in (LetRecBlock (x, y, z, a, b)) }
+  | LetRec LetDecl { let x, y, z, a, b = $1 in (LetRecBlockSeq (x, y, z, a, b, $2)) }  
       
 Let :
     LET Letsub { $2 }
@@ -68,40 +69,56 @@ Let :
     LET Letsub { Printf.printf "1->s:%i,e:%i\n" (Parsing.symbol_start ()) (Parsing.symbol_end ()); $2 }
 */
 Letsub :
-    ID EQ Expr { [$1], [$3] }
+    ID TypedEQ Expr { [$1], [$3], [$2] }
+  | ID TypedEQ Expr AND Letsub { let ids, exps, retsigs = $5 in $1::ids, $3::exps, $2::retsigs }
+  | ID Paras TypedEQ Expr { [$1], [to_funexp $2 $4], [$3] }
+  | ID Paras TypedEQ Expr AND Letsub { let ids, exps, retsigs = $6 in $1::ids, (to_funexp $2 $4)::exps, $3::retsigs }
 /*
     ID EQ Expr { Printf.printf "2->s:%i,e:%i\n" (Parsing.symbol_start ()) (Parsing.symbol_end ()); [$1], [$3] }
 */
-  | ID EQ Expr AND Letsub { let ids, exps = $5 in $1::ids, $3::exps }
-  | ID IDs EQ Expr { [$1], [to_funexp $2 $4] }
-  | ID IDs EQ Expr AND Letsub { let ids, exps = $6 in $1::ids, (to_funexp $2 $4)::exps }
 
 LetRec :
     LET REC LetRecsub { $3 }
 LetRecsub :
-    ID EQ FUN ID RARROW Expr { [$1], [$4], [$6] }
-  | ID EQ FUN ID RARROW Expr AND LetRecsub { let ids, paras, exps = $8 in $1::ids, $4::paras, $6::exps }
-  | ID IDs EQ Expr { let h, t = List.hd $2, List.tl $2 in [$1], [h], [to_funexp t $4] }
-  | ID IDs EQ Expr AND LetRecsub { let ids, paras, exps = $6 in let h, t = List.hd $2, List.tl $2 in
-                                   $1::ids, h::paras, (to_funexp t $4)::exps }
+ID TypedEQ FUN Para RARROW Expr { let para, paraty = $4 in [$1], [para], [paraty], [$6], [$2] }
+  | ID TypedEQ FUN Para RARROW Expr AND LetRecsub { let ids, paras, paratys, exps, retsigs = $8 in
+                                                    let para, paraty = $4 in
+                                                    $1::ids, para::paras, paraty::paratys, $6::exps, $2::retsigs }
+  | ID Paras TypedEQ Expr { let h, t = List.hd $2, List.tl $2 in
+                            let para, paraty = h in
+                            [$1], [para], [paraty], [to_funexp t $4], [$3] }
+  | ID Paras TypedEQ Expr AND LetRecsub { let ids, paras, paratys, exps, retsigs = $6 in
+                                        let h, t = List.hd $2, List.tl $2 in
+                                        let para, paraty = h in
+                                        $1::ids, para::paras, paraty::paratys, (to_funexp t $4)::exps, $3::retsigs }
 
+TypedEQ :
+    EQ { None }
+  | COLON TypedExpr EQ { Some $2 }
+      
 Expr :
     BORExpr { $1 }
-/*  | SExpr { $1 } */
-
+      
 /* let */
 LetExpr :
-    Let IN Expr { let x, y = $1 in LetExp (x, y, $3) }
+    Let IN Expr { let x, y, z = $1 in LetExp (x, y, z, $3) }
 /*
     Let IN Expr { print_endline "Let Expr"; let x, y = $1 in LetExp (x, y, $3) }
 */
 LetRecExpr :
-    LetRec IN Expr { let x, y, z = $1 in LetRecExp (x, y, z, $3) }
+    LetRec IN Expr { let x, y, z, a, b = $1 in LetRecExp (x, y, z, a, b, $3) }
 
 /* function */
 FunExpr :
-    FUN IDs RARROW Expr { to_funexp $2 $4 }
+    FUN Paras RARROW Expr { to_funexp $2 $4 }
   | DFUN IDs RARROW Expr { to_dfunexp $2 $4 }
+
+Para :
+    ID { $1, None }
+  | LPAREN ID COLON TypedExpr RPAREN { $2, Some $4 }
+Paras :
+    Para { [$1] }
+  | Para Paras { $1::$2 }
       
 IDs :
     ID { [$1] }
@@ -150,7 +167,8 @@ AExpr :
   | ID { Var $1 }
   | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
-
+  | LPAREN Expr COLON TypedExpr RPAREN { TypedExp ($2, $4) }
+      
 Constant :
     INTV { ILit $1 }
   | TRUE { BLit true }
@@ -195,3 +213,17 @@ APattern :
 ListPattern :
     Pattern { [$1] }
   | Pattern SEMI ListPattern { $1::$3 }
+
+/* type expression */
+TypedExpr :
+    ListTypeExpr RARROW TypedExpr { TyFun ($1, $3) }
+  | ListTypeExpr { $1 }
+      
+ListTypeExpr :
+    ATypeExpr LIST { TyList $1 }
+  | ATypeExpr { $1 }
+      
+ATypeExpr :
+    INT { TyInt }
+  | BOOL { TyBool }
+  | LPAREN TypedExpr RPAREN { $2 }

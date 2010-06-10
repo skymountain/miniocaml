@@ -17,6 +17,9 @@ let reservedWords = [
   ("match", Parser.MATCH);
   ("with" , Parser.WITH);
   ("as"   , Parser.AS);
+  ("list" , Parser.LIST);  
+  ("int"  , Parser.INT);  
+  ("bool"  , Parser.BOOL);  
 ]
 
 let err s = raise (Lexical_error s)
@@ -44,6 +47,7 @@ rule main raise_eof = parse
 | "["  { Parser.LSQBRA }
 | "]"  { Parser.RSQBRA }
 | "::" { Parser.COLON2 }
+| ":"  { Parser.COLON }
 | "|"  { Parser.PIPE }
 | ";"  { Parser.SEMI }
 | "_"  { Parser.UNDERBAR }

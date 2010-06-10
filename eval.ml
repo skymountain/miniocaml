@@ -74,11 +74,11 @@ let rec eval_exp env = function
           | BoolV false -> eval_exp env exp3
           | _ -> err ("Test expression must be boolean: if"))
   (* let id = exp1 and id' = ... in exp2 *)
-  | LetExp (ids, es, exp2) ->
+  | LetExp (ids, es, _, exp2) ->
       let vs = eval_exps env es in
       eval_exp (Environment.extendl ids vs env) exp2
   (* fun id -> exp *)
-  | FunExp (id, exp) -> ProcV (id, exp, ref env)
+  | FunExp (id, _, exp) -> ProcV (id, exp, ref env)
   (* dfun id -> exp *)
   | DFunExp (id, exp) -> DProcV (id, exp)
   (* exp1 exp2 *)
@@ -94,7 +94,7 @@ let rec eval_exp env = function
            eval_exp newenv body
        | _ -> err "Non-function value is applied")
   (* let rec id = fun para -> exp1 and id' = ... in exp2 *)
-  | LetRecExp (ids, paras, exps, exp2) ->
+  | LetRecExp (ids, paras, _, exps, _, exp2) ->
       let dummyenv = ref Environment.empty in
       let rec f env = function
           id::idt, para::parat, exp::expt ->
@@ -177,10 +177,11 @@ let rec eval_exp env = function
                                        | (env',_,_) -> Some (env', e)))
           None l
       in
-      match x with
-        Some (env', e) -> eval_exp env' e
-      | None           -> err "Matching fails"
-          
+      (match x with
+         Some (env', e) -> eval_exp env' e
+       | None           -> err "Matching fails")
+  | TypedExp (exp, p) -> eval_exp env exp
+
 (* evaluate expressions *)
 and eval_exps env es =  List.map (fun e-> eval_exp env e) es
 
@@ -191,11 +192,11 @@ and eval_exps env es =  List.map (fun e-> eval_exp env e) es
 (* evaluate (let-)declaretion *)  
 let rec eval_let_decl ids env vs l =
   let f acc_ids env acc_vs = function
-      LetBlockSeq (ids, es, r) ->
+      LetBlockSeq (ids, es, _, r) ->
         let vs = eval_exps env es in
         eval_decl ((List.rev ids)@acc_ids) (Environment.extendl ids vs env) ((List.rev vs)@acc_vs) r
           
-    | LetBlock (ids, es) ->
+    | LetBlock (ids, es, _) ->
         let vs = eval_exps env es in
         List.rev (ids@acc_ids), (Environment.extendl ids vs env), List.rev (vs@acc_vs)
     | _ -> assert false;
@@ -221,10 +222,10 @@ and eval_letrec_decl ids env vs l =
     newenv, vs
   in
   let rec f acc_ids env acc_vs = function
-      LetRecBlockSeq (ids, paras, exps, r) -> (* one of straight blocks *)
+      LetRecBlockSeq (ids, paras, _, exps, _, r) -> (* one of straight blocks *)
         let newenv, vs = eval_anddecl env ids paras exps in
         eval_decl ((List.rev ids)@acc_ids) newenv ((List.rev vs)@acc_vs) r
-    | LetRecBlock (ids, paras, exps) ->
+    | LetRecBlock (ids, paras, _, exps, _) ->
         let newenv, vs = eval_anddecl env ids paras exps in
         List.rev (ids@acc_ids), newenv, List.rev (vs@acc_vs)
     | _ -> assert false;
