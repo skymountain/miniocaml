@@ -20,9 +20,9 @@ let rec read_eval_print env tyenv parse lexbuf promp c eof =
   and cf () = if c then next_eval else (raise End_of_file)
   in
   let (ids, newenv, vs), tys = next_eval env in
-  Misc.iterl3 (fun id v ty ->
+  Misc.iterl3 (fun id v (ty, subst) ->
                  Printf.printf "val %s : " id;
-                 pp_ty ty;
+                 pp_ty (subst_type subst ty);
                  print_string " = ";
                  pp_val v;
                  print_newline()
