@@ -11,6 +11,10 @@ let to_const =
   | BLit b  -> CBool b
   | LLit [] -> CNull
   | _       -> assert false
+
+let fexp_of_biop biop =
+  FunExp ("x", None, FunExp ("y", None, BinOp (biop, (Var "x"), (Var "y"))))
+    
 %}
 
 %token LPAREN RPAREN SEMISEMI
@@ -168,7 +172,8 @@ AExpr :
   | LSQBRA ExpList RSQBRA { LLit $2 }
   | LPAREN Expr RPAREN { $2 }
   | LPAREN Expr COLON TypedExpr RPAREN { TypedExp ($2, $4) }
-      
+  | LPAREN Biop RPAREN { fexp_of_biop $2 }
+
 Constant :
     INTV { ILit $1 }
   | TRUE { BLit true }
@@ -227,3 +232,12 @@ ATypeExpr :
     INT { TyInt }
   | BOOL { TyBool }
   | LPAREN TypedExpr RPAREN { $2 }
+
+/* Binary operation */
+Biop :
+    PLUS { Plus }
+  | MULT { Mult }
+  | LT   { Lt }
+  | BOOLAND { Band }
+  | BOOLOR { Bor }
+  | COLON2 { Cons }
