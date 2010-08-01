@@ -119,28 +119,33 @@ let rec eval_exp env = function
           ListV x -> x
         | _ -> assert false;
       in
-      (* union of two disjoint sets of bounds *)      
-      let rec matching env condv = function
+      (* value env -> matched value -> pattern -> value env * set of bound variables in match exp * matching? *)      
+      let rec matching env condv : Syntax.pattern -> exval Environment.t * StrSet.t * bool = function
+          (* wildcard pattern *)
           Wildcard -> env, ebound, true
+          (* const pattern *)
         | Const c  -> (match condv, c with
                          IntV i1 , CInt i2  when i1 = i2 -> env, ebound, true
                        | BoolV b1, CBool b2 when b1 = b2 -> env, ebound, true
                        | ListV [], CNull                 -> env, ebound, true
                        | _                               -> env, ebound, false)
+          (* as pattern *)
         | As (p, id) ->
             (match matching env condv p with
                _, bounds, false -> env, StrSet.add id bounds, false
              | _, bounds, _ when StrSet.mem id bounds
                  -> err "One or more Variables is bound several times"
              | env', bounds, _ -> (Environment.extend id condv env'), StrSet.add id bounds, true)
+          (* or pattern *)
         | Or (p1, p2) ->
             (match matching env condv p1, matching env condv p2 with
                (_,b1,_), (_,b2,_) when not (StrSet.equal b1 b2)
                  -> begin
-                   err "**Same variables must occur on both sides of | pattern**"
+                   err "Same variables must occur on both sides of | pattern"
                  end
              | (_,b,false), (_,_,false) -> env, b, false
-             | (env',b,true),_ | _,(env',b,true) -> env', b, true)
+             | (env',b,true),_ | _,(env',b,true) -> env', b, true) (* or patter is left associative *)
+          (* list pattern *when matched values is list* *)
         | Lpat ps when is_ListV condv ->
             let vs = get_ListV condv in
             (try
@@ -153,7 +158,9 @@ let rec eval_exp env = function
                (env', b', x)
              with
                Invalid_argument _ -> (env, ebound, false))
+          (* list pattern *when matched values is not list* *)              
         | Lpat _ -> (env, ebound, false)
+          (* Cons pattern *when matched values is list* *)
         | Conspat (hp, tp) when is_ListV condv ->
             let v = get_ListV condv in
             (match v with
@@ -163,7 +170,9 @@ let rec eval_exp env = function
                  let newbonds = union_of_dbounds bounds'1 bounds'2 in
                  let newenv = StrSet.fold (fun id acc -> Environment.extend id (Environment.lookup id env'2) acc) bounds'2 env'1 in
                  (newenv, newbonds, b'1 && b'2))
+          (* Cons pattern *when matched values isnot list* *)
         | Conspat _ -> (env, ebound, false)
+          (* Variable pattern *)
         | Varpat id ->
             Environment.extend id condv env, StrSet.add id ebound, true
       in

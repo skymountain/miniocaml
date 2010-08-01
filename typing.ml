@@ -205,61 +205,6 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
       let ety, subst = ty_exp_expectty tyenv subst exp1 ety in
       let ety, subst = ty_exp_expectty tyenv subst exp2 ety in
       subst_type subst ety, subst
-      
-      (* print_string "--- if start ---\n"; *)
-      (* pp_ty ety; *)
-            
-      (* let _, subst = ty_exp_expectty tyenv subst exp1 ety in *)
-
-      (* pp_subst subst; *)
-
-      (* print_string "||| pp_subst start |||\n"; *)
-      (* pp_ty (subst_type subst ety); *)
-      (* print_string "\n||| pp_subst end |||\n"; *)
-      (* print_string ", "; *)
-      
-      (* let _, subst = ty_exp_expectty tyenv subst exp2 ety in *)
-
-      (* pp_subst subst; *)
-
-      (* print_string "||| pp_subst start |||\n"; *)
-      (* pp_ty (subst_type subst ety); *)
-      (* print_string "||| pp_subst end |||\n"; *)
-      (* print_string "--- if end ---\n"; *)
-      
-      (* subst_type subst ety, subst *)
-
-      (******************************)
-      
-      (* let ety1 = TyVar (fresh_tyvar ()) in *)
-      (* let ety2 = TyVar (fresh_tyvar ()) in *)
-      (* let ety1', subst = ty_exp_expectty tyenv subst exp1 ety1 in *)
-      (* let ety2', subst = ty_exp_expectty tyenv subst exp2 ety2 in *)
-
-      (* print_string "1: "; *)
-      (* pp_ty (subst_type subst ety1); *)
-      (* print_string ", "; *)
-      (* pp_ty ety1'; *)
-
-      (* print_string ",  2: "; *)
-      (* pp_ty (subst_type subst ety2); *)
-      (* print_string ", "; *)
-      (* pp_ty ety2'; *)
-      
-      (* let subst = unify_neweq subst (ety1, ety2) in *)
-
-      (* print_string ",  subst: ety1::"; *)
-      (* pp_ty (subst_type subst ety1); *)
-      (* print_string ",  ety2::"; *)
-      (* pp_ty (subst_type subst ety2); *)
-      (* print_newline (); *)
-
-
-      (* let ety1 = ety1' in *)
-      (* let ety2 = ety2' in *)
-      (* let subst = unify_neweq subst (ety1, ety2) in *)
-      
-      (* subst_type subst ety2, subst *)
   | LetExp (ids, es, retsigs, exp2) ->
       let tys, subst = ty_exps tyenv subst es in
       let tys = unify_with_retsig subst tys retsigs in
@@ -278,33 +223,6 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
       let argty, subst2 = ty_exp_expectty tyenv subst1 exp2 argty in
       subst_type subst2 retty, subst2
   | LetRecExp (ids, args, paratys, bodies, retsigs, exp) ->
-      (* let sigtys = *)
-      (*   List.fold_left (fun acc _ -> *)
-      (*                     let argvar = TyVar (fresh_tyvar ()) in *)
-      (*                     let retvar = TyVar (fresh_tyvar ()) in *)
-      (*                     let idty = TyFun (argvar, retvar) in *)
-      (*                     (argvar, retvar, idty)::acc) [] ids *)
-      (* in *)
-      (* let idtyscs = List.map (fun (_,_,x) -> tysc_of_ty x) sigtys in *)
-      (* let f id arg body subst (argvar, retvar, idty) = *)
-      (*   (\* let argvar = TyVar (fresh_tyvar ()) in *\) *)
-      (*   (\* let retvar = TyVar (fresh_tyvar ()) in *\) *)
-      (*   (\* let idty = TyFun (argvar, retvar) in *\) *)
-      (*   let tyenv = Environment.extendl ids idtyscs tyenv in *)
-      (*   let tyenv = Environment.extend id (tysc_of_ty idty) tyenv in *)
-      (*   let tyenv = Environment.extend arg (tysc_of_ty argvar) tyenv in *)
-      (*   let bty, subst = ty_exp tyenv subst body in *)
-      (*   let subst = unify_neweq subst (retvar, bty) in *)
-      (*   subst_type subst idty, subst *)
-      (* in *)
-      (* let tys, newsubst = *)
-      (*   List.fold_right (fun (id,arg,body,sigty) (tys, subst) -> *)
-      (*                      let ty, newsubst = f id arg body subst sigty in *)
-      (*                      ty::tys, newsubst) *)
-      (*     (Misc.combine4 ids args bodies sigtys) ([], subst)  *)
-      (* in *)
-      (* let tyscs = List.map (fun x -> closure x tyenv newsubst) tys in *)
-      (* let newtyenv = Environment.extendl ids tyscs tyenv in *)      
       let tys, subst = ty_letrec tyenv subst ids args paratys bodies in
       let tys = unify_with_retsig subst tys retsigs in
       let tyscs = closure_tys tyenv subst tys in
@@ -326,6 +244,7 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
         | CBool _ -> TyBool
         | CNull -> TyList (TyVar (fresh_tyvar ()))
       in
+      (* type env -> substitution -> type of condition -> pattern -> (type env * new substitution * set of bound variables in match exp *)
       let rec ty_pattern (tyenv : Syntax.tysc Environment.t) subst condty = function
           Wildcard -> tyenv, subst, Misc.ebound
         | Const c  -> (match condty, c with
@@ -333,7 +252,7 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
                        | TyBool, CBool _ -> tyenv, subst, Misc.ebound
                        | TyList _, CNull -> tyenv, subst, Misc.ebound
                        | TyVar _, _ -> tyenv, unify_neweq subst (condty, to_type c), Misc.ebound
-                       | _ -> err (Printf.sprintf "Type of pattern is %s, condition's type is %s"
+                       | _ -> err (Printf.sprintf "Type of pattern is %s but condition's type is %s"
                                      (str_of_type (to_type c)) (str_of_type condty)))
         | As (p, id) ->
             let newtyenv, newsubst, bounds = ty_pattern tyenv subst condty p in
@@ -357,12 +276,6 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
               in
               let subst = unify_neweqs subst (List.combine (List.map ty_of_tysc btys1) (List.map ty_of_tysc btys2)) in
               Environment.extendl bvars btys1 tyenv(*tyenv1*), subst, b1
-                
-              (* let btys1, btys2 = subst_types subst2 btys1, subst_types subst2 btys2 in *)
-              (* if not (eq_tys btys1 btys2) then *)
-              (*   err "Each variable must have same type on both sides of | pattern" *)
-              (* else  *)
-              (*   Environment.extendl bvars btys1 tyenv, subst2, b1 *)
         | Lpat ps ->
             ty_pattern tyenv subst condty (List.fold_right (fun p acc -> Conspat (p, acc)) ps (Const CNull))
         | Conspat (hp, tp) ->
@@ -377,8 +290,6 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
                               (str_of_type (TyList (TyVar (fresh_tyvar ()))))
                               (str_of_type condty)))
             in
-            (* let var = TyVar (fresh_tyvar ()) in *)
-            (* let subst' = unify_neweq subst (var, elemty) in *)
             let tyenv', subst', bounds' = ty_pattern tyenv subst' elemty hp in
             let newtyenv, newsubst, bounds'' = ty_pattern tyenv' subst' condty tp in
             newtyenv, newsubst, Misc.union_of_dbounds bounds' bounds'' err
@@ -410,10 +321,6 @@ let rec ty_exp tyenv subst : exp -> ty * (tyvar * ty) list = function
 
 and ty_exp_expectty tyenv subst exp expectty =
   let ty, subst = ty_exp tyenv subst exp in
-  (* print_endline "___start____"; *)
-  (* let subst = unify_neweq subst (ty, expectty) in *)
-  (* print_endline "___end____"; *)
-  (* ty, subst *)
   ty, unify_neweq subst (ty, expectty)
 
 and ty_exps tyenv subst exps =
@@ -432,9 +339,6 @@ and ty_letrec tyenv subst ids args paratys bodies =
   in
   let idtyscs = List.map (fun (_,_,x) -> tysc_of_ty x) sigtys in
   let f id arg body subst (argvar, retvar, idty) =
-    (* let argvar = TyVar (fresh_tyvar ()) in *)
-    (* let retvar = TyVar (fresh_tyvar ()) in *)
-    (* let idty = TyFun (argvar, retvar) in *)
     let tyenv = Environment.extendl ids idtyscs tyenv in
     let tyenv = Environment.extend id (tysc_of_ty idty) tyenv in
     let tyenv = Environment.extend arg (tysc_of_ty argvar) tyenv in
